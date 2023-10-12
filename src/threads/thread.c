@@ -350,14 +350,26 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  // Assert priority is valid
+  ASSERT (PRI_MIN <= new_priority && new_priority <= PRI_MAX);
+  
+  enum intr_level old_level = intr_disable();
+  int old_priority = thread_current()->priority;
+  thread_current ()->priority = new_priority; // Set the thread's priority
+  
+  if (new_priority < old_priority // If priority is being decreased...
+      && new_priority < next_thread_to_run()->priority) { // and priority being decreased
+    
+    intr_set_level(old_level);
+    thread_yield(); // Yield to next thread
+  }
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return thread_current ()->priority; // TODO: make effective priority
 }
 
 /* Sets the current thread's nice value to NICE. */
