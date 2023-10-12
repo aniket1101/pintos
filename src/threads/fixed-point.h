@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdint.h>
 
 #define FP_Q 14
@@ -6,23 +5,23 @@
 
 #define FP_F (1 << FP_Q)
 
-#define TO_FP (n) (n * FP_F)
+#define INT_TO_FP(N) (N * FP_F)
 
-#define TO_INT_ZERO (x) (x / FP_F)
+#define FP_TO_INT_ROUND_ZERO(X) (X / FP_F)
 
-#define TO_INT_NEAREST (x) x > 0 ? (x + (FP_F / 2)) / FP_F : \
-                                   (x - (FP_F / 2)) / FP_F
+#define FP_TO_NEAREST_INT(X) (X >= 0 ? ((X + (FP_F / 2)) / FP_F) : \
+                                   ((X - (FP_F / 2)) / FP_F))
 
-#define ADD (x, y) (x + y)
+#define ADD_FPS(X, Y) (X + Y)
 
-#define SUB (x, y) (x - y)
+#define SUB_FPS(X, Y) (X - Y)
 
-#define ADD_FP (x, n) (x + (n * FP_F))
+#define ADD_INT_AND_FP(X, N) (X + (N * FP_F))
 
-#define MULT_FP (x, y) ((((int64_t) x) * y) / FP_F)
+#define MULT_FPS(X, Y) ((((int64_t) X) * Y) / FP_F)
 
-#define MULT (x, n) (x * n)
+#define MULT_INT_TO_FP(X, N) (X * N)
 
-#define DIV_FP (x, y) ((((int64_t) x) * FP_F) / y)
+#define DIV_FPS(X, Y) ((((int64_t) X) * FP_F) / Y)
 
-#define DIV (x, n) (x / n)
+#define DIV_FP_BY_INT(X, N) (X / N)
