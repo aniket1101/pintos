@@ -377,6 +377,8 @@ thread_get_priority (void)
 void recalculate_thread_priority(struct thread *thread) {
   int scaled_recent_cpu = DIV_FP_BY_INT(INT_TO_FP(thread->recent_cpu), 4); // Should take int
   int scaled_nice = thread->nice * 2;
+  int fp_priority = -SUB_FP_AND_INT(scaled_recent_cpu, PRI_MAX - scaled_nice);
+  thread->priority = FP_TO_INT_ROUND_ZERO(fp_priority);
 }
 
 /* Sets the current thread's nice value to NICE. */
