@@ -420,7 +420,7 @@ thread_get_load_avg (void)
 
 void update_load_avg(void) {
   int ready_threads = list_size(&ready_list) + 1;
-  int new_avg = ADD_FP_AND_INT(MULT_INT_TO_FP(59, load_avg), ready_threads);
+  int new_avg = ADD_FP_AND_INT(MULT_INT_BY_FP(59, load_avg), ready_threads);
   load_avg = DIV_FP_BY_INT(new_avg, 60);
 }
 
