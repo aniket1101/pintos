@@ -60,6 +60,8 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-mlfqs". */
 bool thread_mlfqs;
 
+int load_avg;                   /* Make the load_avg global variable */
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -100,6 +102,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  load_avg = 0; // Initialise load_avg to 0 at the start of the program
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -393,7 +396,7 @@ thread_set_nice (int nice)
 
   if (!list_empty(&ready_list)) {
 
-    struct thread *highest = list_head(&ready_list); // Find highest priority
+    struct thread *highest = list_entry(list_begin(&ready_list), struct thread, allelem); // Find highest priority
 
     if (thread_current ()-> priority < highest->priority) { // Compare priorities
       thread_yield(); // Yield to next thread
@@ -413,7 +416,12 @@ int
 thread_get_load_avg (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  int fp_load_av = INT_TO_FP(load_avg);
+  int ready_threads = list_size(&ready_list);
+  int new_avg = ADD_FP_AND_INT(MULT_INT_TO_FP(59, fp_load_av), ready_threads);
+  new_avg = DIV_FP_BY_INT(new_avg, 60);
+  new_avg = FP_TO_INT_ROUND_ZERO(new_avg); // Not sure if should be int or FP
+  return new_avg * 100;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -421,7 +429,12 @@ int
 thread_get_recent_cpu (void) 
 {
   /* Not yet implemented. */
-  return 0;
+  return 100 * thread_current()->recent_cpu;
+}
+
+void update_recent_cpu(struct thread *thread) {
+  int coeffient = (thread_get_load_avg() * 2) / (thread_get_load_avg() * 2 + 1);
+  thread->recent_cpu = coeffient * thread->recent_cpu + thread->nice;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
