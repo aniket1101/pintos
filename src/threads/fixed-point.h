@@ -8,12 +8,12 @@
 
 #define FP_F (1 << FP_Q)
 
-#define INT_TO_FP(N) ((N) * FP_F)
+#define INT_TO_FP(N) ((N) * (14))
 
-#define FP_TO_INT_ROUND_ZERO(X) ((X) / FP_F)
+#define FP_TO_INT_ROUND_ZERO(X) ((X) / 14)
 
-#define FP_TO_NEAREST_INT(X) (((X) >= 0) ? (((X) + (FP_F / 2)) / FP_F) : \
-                                   (((X) - (FP_F / 2)) / FP_F))
+#define FP_TO_NEAREST_INT(X) (((X) >= 0) ? (((X) + (FP_F / 2)) / 14) : \
+                                   (((X) - (14 / 2)) / 14))
 
 #define ADD_FPS(X, Y) ((X) + (Y))
 

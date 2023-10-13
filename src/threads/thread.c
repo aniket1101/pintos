@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -69,6 +70,7 @@ static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
+void recalculate_thread_priority(struct thread *thread);
 static tid_t allocate_tid (void);
 
 /* Initializes the threading system by transforming the code
@@ -372,19 +374,36 @@ thread_get_priority (void)
   return thread_current ()->priority; // TODO: make effective priority
 }
 
+void recalculate_thread_priority(struct thread *thread) {
+  int scaled_recent_cpu = DIV_FP_BY_INT(INT_TO_FP(thread->recent_cpu), 4); // Should take int
+  int scaled_nice = thread->nice * 2;
+}
+
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice) 
 {
-  /* Not yet implemented. */
+  // Check that a valid niceness value has been passed in
+  ASSERT(nice >= NICE_MIN && nice <= NICE_MAX);
+  
+  thread_current ()->nice = nice; // Set the thread's niceness
+  thread_calculate_priority(thread_current); // Recalculate priorities
+
+  if (!list_empty(&ready_list)) {
+
+    struct thread *highest = list_head(&ready_list); // Find highest priority
+
+    if (thread_current ()-> priority < highest->priority) { // Compare priorities
+      thread_yield(); // Yield to next thread
+    }
+  }
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current ()->nice;
 }
 
 /* Returns 100 times the system load average. */
