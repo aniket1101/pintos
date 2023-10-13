@@ -60,7 +60,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-mlfqs". */
 bool thread_mlfqs;
 
-int load_avg;                   /* Make the load_avg global variable */
+int64_t load_avg;                   /* Make the load_avg global variable */
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -432,7 +432,7 @@ thread_get_recent_cpu (void)
 }
 
 void update_recent_cpu(struct thread *thread) {
-  int scaled_load_avg = MULT_FP_BY_INT(thread_get_load_avg(), 2);
+  int scaled_load_avg = MULT_FP_BY_INT(load_avg, 2);
   int coeffient = DIV_FPS(scaled_load_avg, ADD_FP_AND_INT(scaled_load_avg, 1));
   thread->recent_cpu = 
     ADD_FP_AND_INT(MULT_FP_BY_INT(thread->recent_cpu, coeffient), thread->nice);
