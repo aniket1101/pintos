@@ -432,7 +432,7 @@ thread_get_recent_cpu (void)
 }
 
 void update_recent_cpu(struct thread *thread) {
-  int scaled_load_avg = MULT_FP_BY_INT(thread_get_load_avg(), 2)
+  int scaled_load_avg = MULT_FP_BY_INT(thread_get_load_avg(), 2);
   int coeffient = DIV_FPS(scaled_load_avg, ADD_FP_AND_INT(scaled_load_avg, 1));
   thread->recent_cpu = 
     ADD_FP_TO_INT(MULT_FP_BY_INT(thread->recent_cpu, coeffient), thread->nice);
