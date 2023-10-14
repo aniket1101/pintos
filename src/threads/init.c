@@ -73,8 +73,6 @@ static void locate_block_devices (void);
 static void locate_block_device (enum block_type, const char *name);
 #endif
 
-int load_avg;
-
 int main (void) NO_RETURN;
 
 /* Pintos main program. */
@@ -137,7 +135,6 @@ main (void)
   swap_init ();
 #endif
 
-  load_avg = 0;
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */

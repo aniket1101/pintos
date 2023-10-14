@@ -61,7 +61,8 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-mlfqs". */
 bool thread_mlfqs;
 
-int load_avg;                   /* Make the load_avg global variable */
+int64_t load_avg;                   /* Make the load_avg global variable */
+
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -293,7 +294,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered(&ready_list, &(t->elem), compare_priorities, NULL);
+  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -363,10 +364,10 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-
-  if (cur != idle_thread) {
+  
+  if (cur != idle_thread) { 
     list_insert_ordered(&ready_list, &(cur->elem), compare_priorities, NULL);
-  }
+}
 
   cur->status = THREAD_READY;
   schedule ();
@@ -427,6 +428,9 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
 void
 thread_set_nice (int nice) 
 {
+
+  ASSERT(thread_mlfqs); // Ensure that mlfqs is set to true
+
   // Check that a valid niceness value has been passed in
   ASSERT(nice >= NICE_MIN && nice <= NICE_MAX);
   
