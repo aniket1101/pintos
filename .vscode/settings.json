@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "*.html": "html",
-        "random": "cpp"
+        "random": "cpp",
+        "thread.h": "c"
     }
 }

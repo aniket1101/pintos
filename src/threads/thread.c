@@ -392,6 +392,9 @@ void recalculate_thread_priority(struct thread *thread) {
 void
 thread_set_nice (int nice) 
 {
+
+  ASSERT(thread_mlfqs); // Ensure that mlfqs is set to true
+
   // Check that a valid niceness value has been passed in
   ASSERT(nice >= NICE_MIN && nice <= NICE_MAX);
   
