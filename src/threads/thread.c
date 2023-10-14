@@ -240,6 +240,13 @@ thread_block (void)
   schedule ();
 }
 
+// Auxilliary function to compare priorities used to sort the ready lists
+static bool compare_priorities(const struct list_elem *a, 
+    const struct list_elem *b, void *aux UNUSED) {
+  return list_entry(a, struct thread, elem)->priority 
+      < list_entry(b, struct thread, elem)->priority;
+}
+
 /* Transitions a blocked thread T to the ready-to-run state.
    This is an error if T is not blocked.  (Use thread_yield() to
    make the running thread ready.)
@@ -257,7 +264,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &(t->elem), compare_priorities, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -327,8 +334,11 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+
+  if (cur != idle_thread) {
+    list_insert_ordered(&ready_list, &(cur->elem), compare_priorities, NULL);
+  }
+
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
