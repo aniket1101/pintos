@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #include "fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -73,7 +74,6 @@ static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
-void recalculate_thread_priority(struct thread *thread);
 static tid_t allocate_tid (void);
 
 /* Initializes the threading system by transforming the code
@@ -144,12 +144,41 @@ thread_tick (void)
   else if (t->pagedir != NULL)
     user_ticks++;
 #endif
-  else
+  else 
     kernel_ticks++;
+
+  // Recalculate all the priority, recent_cpu and load_avg as necessary.
+  recalculate_scheduler_values(); 
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+}
+
+/* Recalculates the priority, recent_cpu and load_avg at each timer 
+   interrupt. */
+void
+recalculate_scheduler_values (void)
+{
+  struct thread *current = thread_current();
+
+  // Recalculate priority for all threads on every fourth clock tick
+  if (timer_ticks() % 4 == 0) {
+    thread_foreach(&recalculate_thread_priority, NULL);
+  }
+
+  /* Recalculate recent_cpu and load _avg when when the system tick counter  
+     reaches a multiple of a second */ 
+  if (timer_ticks() % TIMER_FREQ == 0) {
+    thread_foreach(&update_recent_cpu, NULL);
+    load_avg = thread_get_load_avg();
+  }
+
+  /* Each time a timer interrupt occurs, recent cpu is incremented by 1 for the
+    running thread only, unless the idle thread is running. */
+  if (thread_current() != idle_thread) {
+    current->recent_cpu = ADD_FP_AND_INT(current->recent_cpu, 1);
+  }
 }
 
 /* Prints thread statistics. */
@@ -388,7 +417,7 @@ thread_get_priority (void)
   return thread_current ()->priority; // TODO: make effective priority
 }
 
-void recalculate_thread_priority(struct thread *thread) {
+void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   int scaled_recent_cpu = DIV_FP_BY_INT(INT_TO_FP(thread->recent_cpu), 4); // Should take int
   int scaled_nice = thread->nice * 2;
   int fp_priority = -SUB_FP_AND_INT(scaled_recent_cpu, PRI_MAX - scaled_nice);
@@ -406,7 +435,7 @@ thread_set_nice (int nice)
   ASSERT(nice >= NICE_MIN && nice <= NICE_MAX);
   
   thread_current ()->nice = nice; // Set the thread's niceness
-  thread_calculate_priority(thread_current); // Recalculate priorities
+  recalculate_thread_priority(thread_current (), NULL); // Recalculate priorities
 
   if (!list_empty(&ready_list)) {
 
@@ -429,27 +458,26 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  return FP_TO_NEAREST_INT(MULT_FP_BY_INT(load_avg, 100));
-}
-
-void update_load_avg(void) {
-  int ready_threads = list_size(&ready_list) + 1;
-  int new_avg = ADD_FP_AND_INT(MULT_FP_BY_INT(load_avg, 59), ready_threads);
-  load_avg = DIV_FP_BY_INT(new_avg, 60);
+  
+  int fp_load_av = INT_TO_FP(load_avg);
+  int ready_threads = list_size(&ready_list);
+  int new_avg = ADD_FP_AND_INT(MULT_INT_TO_FP(59, fp_load_av), ready_threads);
+  new_avg = DIV_FP_BY_INT(new_avg, 60);
+  new_avg = FP_TO_INT_ROUND_ZERO(new_avg); // Not sure if should be int or FP
+  return new_avg * 100;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  return FP_TO_NEAREST_INT(MULT_FP_BY_INT(thread_current()->recent_cpu, 100));
+  
+  return 100 * thread_current()->recent_cpu;
 }
 
-void update_recent_cpu(struct thread *thread) {
-  int scaled_load_avg = MULT_FP_BY_INT(load_avg, 2);
-  int coeffient = DIV_FPS(scaled_load_avg, ADD_FP_AND_INT(scaled_load_avg, 1));
-  thread->recent_cpu = 
-    ADD_FP_AND_INT(MULT_FP_BY_INT(thread->recent_cpu, coeffient), thread->nice);
+void update_recent_cpu(struct thread *thread, void *aux UNUSED) {
+  int coeffient = (thread_get_load_avg() * 2) / (thread_get_load_avg() * 2 + 1);
+  thread->recent_cpu = coeffient * thread->recent_cpu + thread->nice;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.

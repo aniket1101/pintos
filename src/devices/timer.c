@@ -224,16 +224,14 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+  enum intr_level old_level = intr_disable();
   
   /* Wake up sleeping threads with wake times less than or equal to current ticks. */
   wake_sleeping_threads();
 
-  if (timer_ticks() % TIMER_FREQ == 0) {
-    update_load_avg();
-  }
-
   thread_tick();
 
+  intr_set_level(old_level);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
