@@ -143,11 +143,11 @@ thread_tick (void)
   else if (t->pagedir != NULL)
     user_ticks++;
 #endif
-  else
+  else 
     kernel_ticks++;
 
-    // Recalculate all the priority, recent_cpu and load_avg as necessary.
-    recalculate_scheduler_values(); 
+  // Recalculate all the priority, recent_cpu and load_avg as necessary.
+  recalculate_scheduler_values(); 
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -416,7 +416,7 @@ thread_get_priority (void)
   return thread_current ()->priority; // TODO: make effective priority
 }
 
-void recalculate_thread_priority(struct thread *thread) {
+void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   int scaled_recent_cpu = DIV_FP_BY_INT(INT_TO_FP(thread->recent_cpu), 4); // Should take int
   int scaled_nice = thread->nice * 2;
   int fp_priority = -SUB_FP_AND_INT(scaled_recent_cpu, PRI_MAX - scaled_nice);
@@ -431,7 +431,7 @@ thread_set_nice (int nice)
   ASSERT(nice >= NICE_MIN && nice <= NICE_MAX);
   
   thread_current ()->nice = nice; // Set the thread's niceness
-  recalculate_thread_priority(thread_current); // Recalculate priorities
+  recalculate_thread_priority(thread_current (), NULL); // Recalculate priorities
 
   if (!list_empty(&ready_list)) {
 
