@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #include "fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
@@ -72,7 +73,6 @@ static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
-void recalculate_thread_priority(struct thread *thread);
 static tid_t allocate_tid (void);
 
 /* Initializes the threading system by transforming the code
@@ -146,9 +146,38 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+    // Recalculate all the priority, recent_cpu and load_avg as necessary.
+    recalculate_scheduler_values(); 
+
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+}
+
+/* Recalculates the priority, recent_cpu and load_avg at each timer 
+   interrupt. */
+void
+recalculate_scheduler_values (void)
+{
+  struct thread *current = thread_current();
+
+  // Recalculate priority for all threads on every fourth clock tick
+  if (timer_ticks() % 4 == 0) {
+    thread_foreach(&recalculate_thread_priority, NULL);
+  }
+
+  /* Recalculate recent_cpu and load _avg when when the system tick counter  
+     reaches a multiple of a second */ 
+  if (timer_ticks() % TIMER_FREQ == 0) {
+    thread_foreach(&update_recent_cpu, NULL);
+    load_avg = thread_get_load_avg();
+  }
+
+  /* Each time a timer interrupt occurs, recent cpu is incremented by 1 for the
+    running thread only, unless the idle thread is running. */
+  if (thread_current() != idle_thread) {
+    current->recent_cpu = ADD_FP_AND_INT(current->recent_cpu, 1);
+  }
 }
 
 /* Prints thread statistics. */
@@ -402,7 +431,7 @@ thread_set_nice (int nice)
   ASSERT(nice >= NICE_MIN && nice <= NICE_MAX);
   
   thread_current ()->nice = nice; // Set the thread's niceness
-  thread_calculate_priority(thread_current); // Recalculate priorities
+  recalculate_thread_priority(thread_current); // Recalculate priorities
 
   if (!list_empty(&ready_list)) {
 
@@ -425,7 +454,7 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
+  
   int fp_load_av = INT_TO_FP(load_avg);
   int ready_threads = list_size(&ready_list);
   int new_avg = ADD_FP_AND_INT(MULT_INT_TO_FP(59, fp_load_av), ready_threads);
@@ -438,7 +467,7 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
+  
   return 100 * thread_current()->recent_cpu;
 }
 
