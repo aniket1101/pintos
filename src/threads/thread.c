@@ -60,7 +60,11 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-mlfqs". */
 bool thread_mlfqs;
 
+<<<<<<< HEAD
 int64_t load_avg;                   /* Make the load_avg global variable */
+=======
+int load_avg;                   /* Make the load_avg global variable */
+>>>>>>> origin
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -415,6 +419,7 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
+<<<<<<< HEAD
   return FP_TO_NEAREST_INT(MULT_FP_BY_INT(load_avg, 100));
 }
 
@@ -422,12 +427,22 @@ void update_load_avg(void) {
   int ready_threads = list_size(&ready_list) + 1;
   int new_avg = ADD_FP_AND_INT(MULT_FP_BY_INT(load_avg, 59), ready_threads);
   load_avg = DIV_FP_BY_INT(new_avg, 60);
+=======
+  /* Not yet implemented. */
+  int fp_load_av = INT_TO_FP(load_avg);
+  int ready_threads = list_size(&ready_list);
+  int new_avg = ADD_FP_AND_INT(MULT_INT_TO_FP(59, fp_load_av), ready_threads);
+  new_avg = DIV_FP_BY_INT(new_avg, 60);
+  new_avg = FP_TO_INT_ROUND_ZERO(new_avg); // Not sure if should be int or FP
+  return new_avg * 100;
+>>>>>>> origin
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
+<<<<<<< HEAD
   return FP_TO_NEAREST_INT(MULT_FP_BY_INT(thread_current()->recent_cpu, 100));
 }
 
@@ -436,6 +451,15 @@ void update_recent_cpu(struct thread *thread) {
   int coeffient = DIV_FPS(scaled_load_avg, ADD_FP_AND_INT(scaled_load_avg, 1));
   thread->recent_cpu = 
     ADD_FP_AND_INT(MULT_FP_BY_INT(thread->recent_cpu, coeffient), thread->nice);
+=======
+  /* Not yet implemented. */
+  return 100 * thread_current()->recent_cpu;
+}
+
+void update_recent_cpu(struct thread *thread) {
+  int coeffient = (thread_get_load_avg() * 2) / (thread_get_load_avg() * 2 + 1);
+  thread->recent_cpu = coeffient * thread->recent_cpu + thread->nice;
+>>>>>>> origin
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
