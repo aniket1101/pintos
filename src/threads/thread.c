@@ -60,6 +60,9 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-mlfqs". */
 bool thread_mlfqs;
 
+int64_t load_avg;                   /* Make the load_avg global variable */
+
+
 static void kernel_thread (thread_func *, void *aux);
 
 static void idle (void *aux UNUSED);
@@ -100,6 +103,7 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+  load_avg = 0; // Initialise load_avg to 0 at the start of the program
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -261,7 +265,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_insert_ordered(&ready_list, &(t->elem), compare_priorities, NULL);
+  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -331,10 +335,10 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-
-  if (cur != idle_thread) {
+  
+  if (cur != idle_thread) { 
     list_insert_ordered(&ready_list, &(cur->elem), compare_priorities, NULL);
-  }
+}
 
   cur->status = THREAD_READY;
   schedule ();
@@ -395,6 +399,9 @@ void recalculate_thread_priority(struct thread *thread) {
 void
 thread_set_nice (int nice) 
 {
+
+  ASSERT(thread_mlfqs); // Ensure that mlfqs is set to true
+
   // Check that a valid niceness value has been passed in
   ASSERT(nice >= NICE_MIN && nice <= NICE_MAX);
   
@@ -403,7 +410,7 @@ thread_set_nice (int nice)
 
   if (!list_empty(&ready_list)) {
 
-    struct thread *highest = list_head(&ready_list); // Find highest priority
+    struct thread *highest = list_entry(list_begin(&ready_list), struct thread, allelem); // Find highest priority
 
     if (thread_current ()-> priority < highest->priority) { // Compare priorities
       thread_yield(); // Yield to next thread
@@ -422,16 +429,27 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return FP_TO_NEAREST_INT(MULT_FP_BY_INT(load_avg, 100));
+}
+
+void update_load_avg(void) {
+  int ready_threads = list_size(&ready_list) + 1;
+  int new_avg = ADD_FP_AND_INT(MULT_FP_BY_INT(load_avg, 59), ready_threads);
+  load_avg = DIV_FP_BY_INT(new_avg, 60);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return FP_TO_NEAREST_INT(MULT_FP_BY_INT(thread_current()->recent_cpu, 100));
+}
+
+void update_recent_cpu(struct thread *thread) {
+  int scaled_load_avg = MULT_FP_BY_INT(load_avg, 2);
+  int coeffient = DIV_FPS(scaled_load_avg, ADD_FP_AND_INT(scaled_load_avg, 1));
+  thread->recent_cpu = 
+    ADD_FP_AND_INT(MULT_FP_BY_INT(thread->recent_cpu, coeffient), thread->nice);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.

@@ -29,20 +29,14 @@
 // Takes in an FP and one int and returns FP
 #define ADD_FP_AND_INT(X, N) ((X) + (INT_TO_FP(N))) 
 
-<<<<<<< HEAD
-// Takes in 2 FP and returns FP
-#define MULT_FPS(X, Y) (((int64_t) (X) * (Y)) / FP_F) 
-
-=======
 // Takes in an FP and one int and returns FP
 #define SUB_FP_AND_INT(X, N) ((X) - (INT_TO_FP(N)))
 
 // Takes in 2 FP and returns FP
 #define MULT_FPS(X, Y) (((int64_t) (X) * (Y)) / FP_F) 
 
->>>>>>> c1c9ffc50f2fbc567825f55ee1ecb02e37e26d76
 // Takes in 1 FP and one int and returns FP
-#define MULT_INT_TO_FP(X, N) ((X) * (N)) 
+#define MULT_FP_BY_INT(X, N) ((X) * (N)) 
 
 // Takes in 2 FP and returns FP
 #define DIV_FPS(X, Y) (((int64_t) (X) * FP_F) / (Y))
