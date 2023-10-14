@@ -471,7 +471,7 @@ thread_get_recent_cpu (void)
   return 100 * thread_current()->recent_cpu;
 }
 
-void update_recent_cpu(struct thread *thread) {
+void update_recent_cpu(struct thread *thread, void *aux UNUSED) {
   int coeffient = (thread_get_load_avg() * 2) / (thread_get_load_avg() * 2 + 1);
   thread->recent_cpu = coeffient * thread->recent_cpu + thread->nice;
 }
