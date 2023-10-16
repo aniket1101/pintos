@@ -21,6 +21,10 @@
    of thread.h for details. */
 #define THREAD_MAGIC 0xcd6abf4b
 
+// Clamp a value between its minimum and maximum
+#define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
+#define CLAMP_PRI(val) (CLAMP(val, PRI_MIN, PRI_MAX)) // Clamp a priority
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -394,8 +398,7 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  // Assert priority is valid
-  ASSERT (PRI_MIN <= new_priority && new_priority <= PRI_MAX);
+  new_priority = CLAMP_PRI(new_priority);
   
   enum intr_level old_level = intr_disable();
   int old_priority = thread_current()->priority;
@@ -428,12 +431,7 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   if (thread == thread_current()) {
     thread_set_priority(priority);
   } else {
-    if (priority > PRI_MAX) {
-      priority = PRI_MAX;
-    } else if (priority < PRI_MIN) {
-      priority = PRI_MIN;
-    }
-    thread->priority = priority;
+    thread->priority = CLAMP_PRI(priority);
   }
 }
 
