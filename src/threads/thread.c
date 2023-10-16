@@ -61,7 +61,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-mlfqs". */
 bool thread_mlfqs;
 
-int64_t load_avg;                   /* Make the load_avg global variable */
+static int64_t load_avg;        /* Make the load_avg global variable */
 
 
 static void kernel_thread (thread_func *, void *aux);
@@ -421,14 +421,21 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   int scaled_recent_cpu = DIV_FP_BY_INT(INT_TO_FP(thread->recent_cpu), 4); // Should take int
   int scaled_nice = thread->nice * 2;
   int fp_priority = -SUB_FP_AND_INT(scaled_recent_cpu, PRI_MAX - scaled_nice);
-  thread->priority = FP_TO_INT_ROUND_ZERO(fp_priority);
+  fp_priority = FP_TO_INT_ROUND_ZERO(fp_priority);
+
+  if (fp_priority > PRI_MAX) {
+    fp_priority = PRI_MAX;
+  }
+  if (fp_priority < PRI_MIN) {
+    fp_priority = PRI_MIN;
+  }
+  thread->priority = fp_priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice) 
 {
-
   ASSERT(thread_mlfqs); // Ensure that mlfqs is set to true
 
   // Check that a valid niceness value has been passed in
@@ -458,21 +465,17 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  
-  int fp_load_av = INT_TO_FP(load_avg);
-  int ready_threads = list_size(&ready_list);
-  int new_avg = ADD_FP_AND_INT(MULT_FP_BY_INT(fp_load_av, 59), ready_threads);
+  int64_t new_avg = ADD_FP_AND_INT(MULT_FP_BY_INT(load_avg, 59), threads_ready());
   new_avg = DIV_FP_BY_INT(new_avg, 60);
-  new_avg = FP_TO_INT_ROUND_ZERO(new_avg); // Not sure if should be int or FP
-  return new_avg * 100;
+  new_avg = MULT_FP_BY_INT(new_avg, 100)
+  return FP_TO_INT_ROUND_ZERO(new_avg);
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  
-  return 100 * thread_current()->recent_cpu;
+  return MULT_FP_BY_INT(100, thread_current()->recent_cpu);
 }
 
 void update_recent_cpu(struct thread *thread, void *aux UNUSED) {
