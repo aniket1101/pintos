@@ -99,7 +99,7 @@ struct thread
     struct list_elem elem;              /* List element. */
 
     int nice;                           /* Niceness value. */
-    float recent_cpu;                   /* recent_cpu value. */
+    int64_t recent_cpu;                   /* recent_cpu value. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

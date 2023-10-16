@@ -461,7 +461,7 @@ thread_get_load_avg (void)
   
   int fp_load_av = INT_TO_FP(load_avg);
   int ready_threads = list_size(&ready_list);
-  int new_avg = ADD_FP_AND_INT(MULT_INT_TO_FP(59, fp_load_av), ready_threads);
+  int new_avg = ADD_FP_AND_INT(MULT_FP_BY_INT(fp_load_av, 59), ready_threads);
   new_avg = DIV_FP_BY_INT(new_avg, 60);
   new_avg = FP_TO_INT_ROUND_ZERO(new_avg); // Not sure if should be int or FP
   return new_avg * 100;
