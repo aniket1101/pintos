@@ -12,7 +12,6 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
-#include "fixed-point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -61,7 +60,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
    Controlled by kernel command-line option "-mlfqs". */
 bool thread_mlfqs;
 
-static int64_t load_avg;        /* Make the load_avg global variable */
+static fp_t load_avg;           /* load_avg global fixed point variable */
 
 
 static void kernel_thread (thread_func *, void *aux);
@@ -418,7 +417,7 @@ thread_get_priority (void)
 }
 
 void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
-  int fp_priority = 
+  int priority = 
     FP_TO_INT_ROUND_ZERO(
       -SUB_FP_AND_INT(
         DIV_FP_BY_INT(INT_TO_FP(thread->recent_cpu), 4), 
@@ -427,14 +426,14 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
     );
 
   if (thread == thread_current()) {
-    thread_set_priority(fp_priority);
+    thread_set_priority(priority);
   } else {
-    if (fp_priority > PRI_MAX) {
-      fp_priority = PRI_MAX;
-    } else if (fp_priority < PRI_MIN) {
-      fp_priority = PRI_MIN;
+    if (priority > PRI_MAX) {
+      priority = PRI_MAX;
+    } else if (priority < PRI_MIN) {
+      priority = PRI_MIN;
     }
-    thread->priority = fp_priority;
+    thread->priority = priority;
   }
 }
 
@@ -477,10 +476,16 @@ thread_get_recent_cpu (void)
   return MULT_FP_BY_INT(100, thread_current()->recent_cpu);
 }
 
+// Updates the recent_cpu value of the specific thread
 void update_recent_cpu(struct thread *thread, void *aux UNUSED) {
-  int64_t avg_doubled = thread_get_load_avg() * 2; 
-  thread->recent_cpu = (avg_doubled / (avg_doubled + 1)) 
-    * (thread->recent_cpu + thread->nice);
+  fp_t avg_doubled = MULT_FP_BY_INT(thread_get_load_avg(), 2); 
+  thread->recent_cpu = 
+    ADD_FP_AND_INT( 
+      MULT_FPS(
+        DIV_FPS(avg_doubled, ADD_FP_AND_INT(avg_doubled, 1)), 
+        thread->recent_cpu),
+      thread->nice
+    );
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.

@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "fixed-point.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -99,7 +100,7 @@ struct thread
     struct list_elem elem;              /* List element. */
 
     int nice;                           /* Niceness value. */
-    int64_t recent_cpu;                 /* recent_cpu value. */
+    fp_t recent_cpu;                    /* recent_cpu fixed point value. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */

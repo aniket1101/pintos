@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+typedef int64_t fp_t;
+
 #define FP_Q 14
 #define FP_P 17
 
