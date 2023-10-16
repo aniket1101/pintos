@@ -163,7 +163,7 @@ recalculate_scheduler_values (void)
   struct thread *current = thread_current();
 
   // Recalculate priority for all threads on every fourth clock tick
-  if (timer_ticks() % 4 == 0) {
+  if (timer_ticks() % TIME_SLICE == 0) {
     thread_foreach(&recalculate_thread_priority, NULL);
   }
 
@@ -418,40 +418,35 @@ thread_get_priority (void)
 }
 
 void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
-  int scaled_recent_cpu = DIV_FP_BY_INT(INT_TO_FP(thread->recent_cpu), 4); // Should take int
-  int scaled_nice = thread->nice * 2;
-  int fp_priority = -SUB_FP_AND_INT(scaled_recent_cpu, PRI_MAX - scaled_nice);
-  fp_priority = FP_TO_INT_ROUND_ZERO(fp_priority);
+  int fp_priority = 
+    FP_TO_INT_ROUND_ZERO(
+      -SUB_FP_AND_INT(
+        DIV_FP_BY_INT(INT_TO_FP(thread->recent_cpu), 4), 
+        PRI_MAX - (thread->nice * 2)
+      )
+    );
 
-  if (fp_priority > PRI_MAX) {
-    fp_priority = PRI_MAX;
+  if (thread == thread_current()) {
+    thread_set_priority(fp_priority);
+  } else {
+    if (fp_priority > PRI_MAX) {
+      fp_priority = PRI_MAX;
+    } else if (fp_priority < PRI_MIN) {
+      fp_priority = PRI_MIN;
+    }
+    thread->priority = fp_priority;
   }
-  if (fp_priority < PRI_MIN) {
-    fp_priority = PRI_MIN;
-  }
-  thread->priority = fp_priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice) 
 {
-  ASSERT(thread_mlfqs); // Ensure that mlfqs is set to true
-
   // Check that a valid niceness value has been passed in
   ASSERT(nice >= NICE_MIN && nice <= NICE_MAX);
   
-  thread_current ()->nice = nice; // Set the thread's niceness
-  recalculate_thread_priority(thread_current (), NULL); // Recalculate priorities
-
-  if (!list_empty(&ready_list)) {
-
-    struct thread *highest = list_entry(list_begin(&ready_list), struct thread, allelem); // Find highest priority
-
-    if (thread_current ()-> priority < highest->priority) { // Compare priorities
-      thread_yield(); // Yield to next thread
-    }
-  }
+  thread_current()->nice = nice; // Set the thread's niceness
+  recalculate_thread_priority(thread_current (), NULL); // Recalculate priority
 }
 
 /* Returns the current thread's nice value. */
@@ -465,10 +460,14 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  int64_t new_avg = ADD_FP_AND_INT(MULT_FP_BY_INT(load_avg, 59), threads_ready());
-  new_avg = DIV_FP_BY_INT(new_avg, 60);
-  new_avg = MULT_FP_BY_INT(new_avg, 100)
-  return FP_TO_INT_ROUND_ZERO(new_avg);
+  return FP_TO_INT_ROUND_ZERO(
+    MULT_FP_BY_INT(
+      DIV_FP_BY_INT(
+        ADD_FP_AND_INT(
+          MULT_FP_BY_INT(load_avg, 59), threads_ready()), 
+        60), 
+      100)
+    );
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -479,8 +478,9 @@ thread_get_recent_cpu (void)
 }
 
 void update_recent_cpu(struct thread *thread, void *aux UNUSED) {
-  int coeffient = (thread_get_load_avg() * 2) / (thread_get_load_avg() * 2 + 1);
-  thread->recent_cpu = coeffient * thread->recent_cpu + thread->nice;
+  int64_t avg_doubled = thread_get_load_avg() * 2; 
+  thread->recent_cpu = (avg_doubled / (avg_doubled + 1)) 
+    * (thread->recent_cpu + thread->nice);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
