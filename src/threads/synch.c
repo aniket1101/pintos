@@ -32,6 +32,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
+#define SEMA_ELEM_WAITERS(sema_elem) ((list_entry(sema_elem, struct semaphore_elem, elem)->semaphore).waiters) 
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -262,6 +264,16 @@ struct semaphore_elem
     struct semaphore semaphore;         /* This semaphore. */
   };
 
+
+/* Semaphore a is less than semaphore b if semaphore b 
+   has a higher priority waiter */
+static bool sema_elem_less(const struct list_elem *a, 
+    const struct list_elem *b, void *aux UNUSED) {
+  return thread_less(
+    list_back (&SEMA_ELEM_WAITERS(a)),
+    list_back (&SEMA_ELEM_WAITERS(b)), NULL);
+}
+
 /* Initializes condition variable COND.  A condition variable
    allows one piece of code to signal a condition and cooperating
    code to receive the signal and act upon it. */
@@ -325,9 +337,16 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (!intr_context ());
   ASSERT (lock_held_by_current_thread (lock));
 
-  if (!list_empty (&cond->waiters)) 
-    sema_up (&list_entry (list_pop_front (&cond->waiters),
-                          struct semaphore_elem, elem)->semaphore);
+  if (!list_empty (&cond->waiters)) {
+    struct list_elem *max_elem = // Find waiter with highest priority thread
+      list_max(&cond->waiters, &sema_elem_less, NULL);
+    list_remove (max_elem); // Remove maximum semaphore
+
+    // Wake up the highest priority waiter
+    sema_up (&(list_entry (max_elem, struct semaphore_elem, elem)->semaphore));
+  } 
+
+  thread_yield(); // Yield in case this new sema waiter
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
