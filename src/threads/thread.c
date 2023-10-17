@@ -274,10 +274,10 @@ thread_block (void)
 }
 
 // Auxilliary function to compare priorities used to sort the ready lists
-static bool compare_priorities(const struct list_elem *a, 
+bool thread_less(const struct list_elem *a, 
     const struct list_elem *b, void *aux UNUSED) {
   return list_entry(a, struct thread, elem)->priority 
-      < list_entry(b, struct thread, elem)->priority;
+      <= list_entry(b, struct thread, elem)->priority;
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -369,7 +369,8 @@ thread_yield (void)
   old_level = intr_disable ();
   
   if (cur != idle_thread) { 
-    list_insert_ordered(&ready_list, &(cur->elem), compare_priorities, NULL);
+    // Insert current thread into ready_list in correct priority position 
+    list_insert_ordered(&ready_list, &(cur->elem), thread_less, NULL);
 }
 
   cur->status = THREAD_READY;
@@ -603,7 +604,7 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    return list_entry (list_pop_back (&ready_list), struct thread, elem);
 }
 
 /* Completes a thread switch by activating the new thread's page
