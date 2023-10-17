@@ -150,8 +150,10 @@ thread_tick (void)
   else 
     kernel_ticks++;
 
-  // Recalculate all the priority, recent_cpu and load_avg as necessary.
-  recalculate_scheduler_values(); 
+  if (thread_mlfqs) {
+    // Recalculate all the priority, recent_cpu and load_avg as necessary.
+    recalculate_scheduler_values(); 
+  }
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
