@@ -372,7 +372,6 @@ thread_yield (void)
   old_level = intr_disable ();
   
   if (cur != idle_thread) { 
-    // Insert current thread into ready_list in correct priority position 
     list_insert_ordered(&ready_list, &(cur->elem), &thread_less, NULL);
 }
 
