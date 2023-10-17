@@ -256,6 +256,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
   thread_yield(); // Yield in case unblocked thread is higher priority
+  
   return tid;
 }
 
@@ -372,7 +373,7 @@ thread_yield (void)
   
   if (cur != idle_thread) { 
     // Insert current thread into ready_list in correct priority position 
-    list_insert_ordered(&ready_list, &(cur->elem), thread_less, NULL);
+    list_insert_ordered(&ready_list, &(cur->elem), &thread_less, NULL);
 }
 
   cur->status = THREAD_READY;
