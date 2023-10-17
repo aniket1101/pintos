@@ -152,4 +152,6 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED);
 void update_recent_cpu(struct thread *thread, void *aux UNUSED);
 void recalculate_scheduler_values (void);
 
+bool thread_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED); 
+
 #endif /* threads/thread.h */
