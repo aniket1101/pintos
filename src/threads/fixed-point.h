@@ -20,7 +20,7 @@ typedef int64_t fp_t;
 
 // Takes in FP and returns int
 #define FP_TO_NEAREST_INT(X) (((X) >= 0) ? ((X + (FP_F / 2)) / FP_F) : \
-                                   (((INT_TO_FP(X)) - (FP_F / 2)) / FP_F)) 
+                                   (((X) - (FP_F / 2)) / FP_F)) 
 
 // Takes in 2 FP and returns FP
 #define ADD_FPS(X, Y) ((X) + (Y)) 
