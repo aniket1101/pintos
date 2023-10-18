@@ -228,8 +228,13 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
-  init_thread (t, name, priority);
-  tid = t->tid = allocate_tid ();
+  if (thread_mlfqs) {
+    init_thread (t, name, recalculate_thread_priority(t, NULL));
+    tid = t->tid = allocate_tid ();      
+  } else {
+    init_thread (t, name, priority);
+    tid = t->tid = allocate_tid ();
+  }
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
@@ -401,11 +406,14 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = CLAMP_PRI(new_priority); // Set thread's priority 
-  
-  if (!intr_context()) { // If not running from an interrupt...
-    thread_yield(); // ...yield to next thread
-  }
+  // If we're using advanced scheduler, ignore calls to thread_set_priority
+  if (!thread_mlfqs) {
+    thread_current ()->priority = CLAMP_PRI(new_priority); // Set thread's priority 
+    
+    if (!intr_context()) { // If not running from an interrupt...
+      thread_yield(); // ...yield to next thread
+    }
+  }  
 }
 
 /* Returns the current thread's priority. */
