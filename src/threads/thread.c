@@ -279,8 +279,11 @@ thread_block (void)
 // Auxilliary function to compare priorities used to sort the ready lists
 bool thread_less(const struct list_elem *a, 
     const struct list_elem *b, void *aux UNUSED) {
-  return list_entry(a, struct thread, elem)->priority 
-      <= list_entry(b, struct thread, elem)->priority;
+      //gets thread, max eff pri in locks list, gets that locks eff pri
+  return (list_entry(list_max(&(list_entry(a, struct thread, elem)->lock_elems), 
+  &lock_less, NULL), struct lock, elem))->eff_pri
+      <= (list_entry(list_max(&(list_entry(b, struct thread, elem)->lock_elems), 
+      &lock_less, NULL), struct lock, elem))->eff_pri;
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
