@@ -276,7 +276,14 @@ thread_block (void)
   schedule ();
 }
 
-// Auxilliary function to compare priorities used to sort the ready lists
+// Removes maximal element from a list and returns it
+static struct list_elem * remove_max(struct list *list, list_less_func *less) {
+  struct list_elem *elem = list_max(list, less, NULL);
+  list_remove(elem);
+  return elem;
+}
+
+/* Compares a threads effective priority from its locks. */
 bool thread_less(const struct list_elem *a, 
     const struct list_elem *b, void *aux UNUSED) {
       //gets thread, max eff pri in locks list, gets that locks eff pri
@@ -304,7 +311,8 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   // Insert current thread into ready_list in correct priority position 
-  list_insert_ordered(&ready_list, &(t->elem), &thread_less, NULL);  t->status = THREAD_READY;
+  list_push_back(&ready_list, &(t->elem));  
+  t->status = THREAD_READY;
   intr_set_level (old_level);
 }
 
@@ -375,7 +383,7 @@ thread_yield (void)
   old_level = intr_disable ();
   
   if (cur != idle_thread) { 
-    list_insert_ordered(&ready_list, &(cur->elem), &thread_less, NULL);
+    list_push_back(&ready_list, &(cur->elem));
 }
 
   cur->status = THREAD_READY;
@@ -601,8 +609,10 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
-    return list_entry (list_pop_back (&ready_list), struct thread, elem);
+  else {
+    return list_entry(remove_max(&ready_list, thread_less), struct thread, 
+                                                                        elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
