@@ -26,11 +26,20 @@ struct lock
     int eff_pri;           /* Holds highest priority of all waiting threads*/
   };
 
+/* Lock_elem to be able to have a lock list. */
+struct lock_elem {
+  struct lock *lock;
+  struct list_elem elem;
+};
+
+
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);
 bool lock_try_acquire (struct lock *);
 void lock_release (struct lock *);
 bool lock_held_by_current_thread (const struct lock *);
+bool lock_less(const struct list_elem *, 
+    const struct list_elem *, void *aux );
 
 /* Condition variable. */
 struct condition 

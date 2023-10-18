@@ -34,6 +34,9 @@
 
 #define SEMA_ELEM_WAITERS(sema_elem) ((list_entry(sema_elem, struct semaphore_elem, elem)->semaphore).waiters) 
 
+// Checks if a priority is valid
+#define PRI_VALID(x) (x > PRI_MIN && x < PRI_MAX)
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -50,6 +53,21 @@ sema_init (struct semaphore *sema, unsigned value)
 
   sema->value = value;
   list_init (&sema->waiters);
+}
+
+/* To compare the effective priorities in locks. */
+bool lock_less(const struct list_elem *a, 
+    const struct list_elem *b, void *aux UNUSED) {
+      struct lock *lock_a = list_entry(a, struct lock, elem);
+      struct lock *lock_b = list_entry(b, struct lock, elem);
+  if (!PRI_VALID(lock_a->eff_pri)) {
+    // recalculate effective priority
+  } 
+  if (!PRI_VALID(lock_b->eff_pri)) {
+    // recalculate effective priority
+  } 
+
+  return lock_a->eff_pri < lock_b->eff_pri;
 }
 
 /* Down or "P" operation on a semaphore.  Waits for SEMA's value
