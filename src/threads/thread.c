@@ -104,6 +104,8 @@ thread_init (void)
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
+  initial_thread->nice = 0;
+  initial_thread->recent_cpu = 0;
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
   load_avg = 0; // Initialise load_avg to 0 at the start of the program
@@ -210,7 +212,7 @@ thread_print_stats (void)
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
 tid_t
-thread_create (const char *name, int priority,
+thread_create (const char *name, int priority, 
                thread_func *function, void *aux) 
 {
   struct thread *t;
@@ -229,7 +231,10 @@ thread_create (const char *name, int priority,
 
   /* Initialize thread. */
   if (thread_mlfqs) {
-    init_thread (t, name, recalculate_thread_priority(t, NULL));
+    t->nice = thread_current()->nice;
+    t->recent_cpu = thread_current()->recent_cpu;
+    recalculate_thread_priority(t, NULL);
+    init_thread (t, name, t->priority);
     tid = t->tid = allocate_tid ();      
   } else {
     init_thread (t, name, priority);
@@ -448,6 +453,7 @@ thread_set_nice (int nice)
   
   thread_current()->nice = nice; // Set the thread's niceness
   recalculate_thread_priority(thread_current (), NULL); // Recalculate priority
+  
 }
 
 /* Returns the current thread's nice value. */
