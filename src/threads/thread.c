@@ -500,7 +500,7 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  return FP_TO_NEAREST_INT(MULT_FP_BY_INT(100, thread_current()->recent_cpu));
+  return FP_TO_NEAREST_INT(MULT_FP_BY_INT(thread_current()->recent_cpu, 100));
 }
 
 // Updates the recent_cpu value of the specific thread
