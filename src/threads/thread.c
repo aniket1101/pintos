@@ -141,7 +141,6 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -432,7 +431,7 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   int priority = 
     FP_TO_INT_ROUND_ZERO(
       -SUB_FP_AND_INT(
-        DIV_FP_BY_INT(INT_TO_FP(thread->recent_cpu), 4), 
+        DIV_FP_BY_INT(thread->recent_cpu, 4), 
         PRI_MAX - (thread->nice * 2)
       )
     );
@@ -455,10 +454,10 @@ thread_set_nice (int nice)
   
   if (!list_empty(&ready_list)) {
      struct thread *next_thread = list_entry(
-      list_max(&ready_list, &thread_less, NULL), struct thread, elem
+      list_begin(&ready_list), struct thread, elem
      );
 
-    if (thread_current() -> priority < next_thread->priority) {
+    if (thread_current()->priority < next_thread->priority) {
       thread_yield();
     }
   }
@@ -483,8 +482,6 @@ recalculate_thread_load_avg(void) {
   if (thread_current() != idle_thread) {
     ready_threads++;
   }
-
-  printf("ready threads: %d\n", ready_threads);
 
   load_avg_coeff = MULT_FPS(load_avg_coeff, load_avg);
   ready_threads_coeff = MULT_FP_BY_INT(ready_threads_coeff, ready_threads);
