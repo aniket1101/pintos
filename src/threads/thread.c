@@ -108,7 +108,7 @@ thread_init (void)
   initial_thread->recent_cpu = 0;
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  load_avg = 0; // Initialise load_avg to 0 at the start of the program
+  load_avg = INT_TO_FP(0); // Initialise load_avg to 0 at the start of the program
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -178,7 +178,7 @@ recalculate_scheduler_values (void)
      reaches a multiple of a second */ 
   if (timer_ticks() % TIMER_FREQ == 0) {
     thread_foreach(&update_recent_cpu, NULL);
-    load_avg = thread_get_load_avg();
+    recalculate_thread_load_avg();
   }
 
   /* Each time a timer interrupt occurs, recent cpu is incremented by 1 for the
@@ -463,18 +463,29 @@ thread_get_nice (void)
   return thread_current ()->nice;
 }
 
+void
+recalculate_thread_load_avg(void) {
+
+  fp_t load_avg_coeff = DIV_FP_BY_INT(INT_TO_FP(59), 60);
+  fp_t ready_threads_coeff = DIV_FP_BY_INT(INT_TO_FP(1), 60);
+
+  int ready_threads = threads_ready();
+  if (thread_current() != idle_thread) {
+    ready_threads++;
+  }
+
+  load_avg_coeff = MULT_FPS(load_avg_coeff, load_avg);
+  ready_threads_coeff = MULT_FP_BY_INT(ready_threads_coeff, ready_threads);
+
+  load_avg = ADD_FPS(load_avg_coeff, ready_threads_coeff);
+ 
+}
+
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  return FP_TO_INT_ROUND_ZERO(
-    MULT_FP_BY_INT(
-      DIV_FP_BY_INT(
-        ADD_FP_AND_INT(
-          MULT_FP_BY_INT(load_avg, 59), threads_ready()), 
-        60), 
-      100)
-    );
+  return FP_TO_NEAREST_INT(MULT_FP_BY_INT(load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
