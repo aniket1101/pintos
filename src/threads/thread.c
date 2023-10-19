@@ -437,11 +437,9 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
       )
     );
 
-  if (thread == thread_current()) {
-    thread_set_priority(priority);
-  } else {
-    thread->priority = CLAMP_PRI(priority);
-  }
+  thread->priority = CLAMP_PRI(priority);
+  
+
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -449,11 +447,21 @@ void
 thread_set_nice (int nice) 
 {
   // Check that a valid niceness value has been passed in
+  ASSERT(thread_mlfqs);
   ASSERT(nice >= NICE_MIN && nice <= NICE_MAX);
   
   thread_current()->nice = nice; // Set the thread's niceness
   recalculate_thread_priority(thread_current (), NULL); // Recalculate priority
   
+  if (!list_empty(&ready_list)) {
+     struct thread *next_thread = list_entry(
+      list_max(&ready_list, &thread_less, NULL), struct thread, elem
+     );
+
+    if (thread_current() -> priority < next_thread->priority) {
+      thread_yield();
+    }
+  }
 }
 
 /* Returns the current thread's nice value. */
@@ -463,9 +471,11 @@ thread_get_nice (void)
   return thread_current ()->nice;
 }
 
+/* Calculates new value of load_avg according to the formula: 
+   (59/60)*load_avg + (1/60)*ready_threads
+   where (59/60) is load_avg_coeff and (1/60) is ready_threads_coeff*/
 void
 recalculate_thread_load_avg(void) {
-
   fp_t load_avg_coeff = DIV_FP_BY_INT(INT_TO_FP(59), 60);
   fp_t ready_threads_coeff = DIV_FP_BY_INT(INT_TO_FP(1), 60);
 
@@ -474,11 +484,12 @@ recalculate_thread_load_avg(void) {
     ready_threads++;
   }
 
+  printf("ready threads: %d\n", ready_threads);
+
   load_avg_coeff = MULT_FPS(load_avg_coeff, load_avg);
   ready_threads_coeff = MULT_FP_BY_INT(ready_threads_coeff, ready_threads);
 
   load_avg = ADD_FPS(load_avg_coeff, ready_threads_coeff);
- 
 }
 
 /* Returns 100 times the system load average. */
@@ -492,12 +503,12 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  return MULT_FP_BY_INT(100, thread_current()->recent_cpu);
+  return FP_TO_NEAREST_INT(MULT_FP_BY_INT(100, thread_current()->recent_cpu));
 }
 
 // Updates the recent_cpu value of the specific thread
 void update_recent_cpu(struct thread *thread, void *aux UNUSED) {
-  fp_t avg_doubled = MULT_FP_BY_INT(thread_get_load_avg(), 2); 
+  fp_t avg_doubled = MULT_FP_BY_INT(load_avg, 2); 
   thread->recent_cpu = 
     ADD_FP_AND_INT( 
       MULT_FPS(
