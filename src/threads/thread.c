@@ -143,7 +143,6 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -171,23 +170,24 @@ recalculate_scheduler_values (void)
 {
   struct thread *current = thread_current();
 
-  // Recalculate priority for all threads on every fourth clock tick
-  if (timer_ticks() % TIME_SLICE == 0) {
-    thread_foreach(&recalculate_thread_priority, NULL);
-  }
+  /* Each time a timer interrupt occurs, recent cpu is incremented by 1 for the
+    running thread only, unless the idle thread is running.*/
+  if (current != idle_thread || !list_empty(&ready_list)) {
+    current->recent_cpu = ADD_FP_AND_INT(current->recent_cpu, 1);
+  } 
 
   /* Recalculate recent_cpu and load _avg when when the system tick counter  
      reaches a multiple of a second */ 
   if (timer_ticks() % TIMER_FREQ == 0) {
+    recalculate_thread_load_avg();
     thread_foreach(&update_recent_cpu, NULL);
-    load_avg = thread_get_load_avg();
   }
 
-  /* Each time a timer interrupt occurs, recent cpu is incremented by 1 for the
-    running thread only, unless the idle thread is running. */
-  if (thread_current() != idle_thread) {
-    current->recent_cpu = ADD_FP_AND_INT(current->recent_cpu, 1);
-  }
+  // Recalculate priority for all threads on every fourth clock tick
+  if (timer_ticks() % TIME_SLICE == 0) {
+    thread_foreach(&recalculate_thread_priority, NULL);
+  } 
+
 }
 
 /* Prints thread statistics. */
@@ -446,32 +446,54 @@ thread_get_priority (void)
   return thread_current ()->eff_priority;
 }
 
+// priority = PRI_MAX - (recent_cpu / 4) - (nice * 2),
 void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   int priority = 
-    FP_TO_INT_ROUND_ZERO(
-      -SUB_FP_AND_INT(
-        DIV_FP_BY_INT(INT_TO_FP(thread->recent_cpu), 4), 
-        PRI_MAX - (thread->nice * 2)
-      )
-    );
+      FP_TO_INT_ROUND_ZERO(
+            MULT_FP_BY_INT(
+          SUB_FP_AND_INT(
+            DIV_FP_BY_INT(thread->recent_cpu, 4), 
+            PRI_MAX - (thread->nice * 2)
+          ),
+          -1
+        )
+      );
 
-  if (thread == thread_current()) {
-    thread_set_priority(priority);
-  } else {
-    thread->base_priority = CLAMP_PRI(priority);
+  // int priority = FP_TO_INT_ROUND_ZERO(SUB_FP_AND_INT(MULT_FP_BY_INT(SUB_FP_AND_INT(DIV_FP_BY_INT(thread->recent_cpu, 4), PRI_MAX), -1), (thread->nice) * 2));
+
+  // int max = -1 * PRI_MAX;
+  
+  // fp_t scaled_cpu = DIV_FP_BY_INT(thread->recent_cpu, 4);
+  // int scaled_nice = (thread->nice) * 2;
+ 
+  // fp_t first = SUB_FP_AND_INT(scaled_cpu, PRI_MAX);
+  // fp_t half = MULT_FP_BY_INT(first, -1);
+  // fp_t second = SUB_FP_AND_INT(half, scaled_nice);
+  // int priority = FP_TO_INT_ROUND_ZERO(second);
+  // printf("Priority: %d\n", CLAMP_PRI(priority));
+  thread->priority = CLAMP_PRI(priority);
   }
-}
 
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice) 
 {
   // Check that a valid niceness value has been passed in
+  ASSERT(thread_mlfqs);
   ASSERT(nice >= NICE_MIN && nice <= NICE_MAX);
   
   thread_current()->nice = nice; // Set the thread's niceness
   recalculate_thread_priority(thread_current (), NULL); // Recalculate priority
   
+  if (!list_empty(&ready_list)) {
+     struct thread *next_thread = list_entry(
+      list_begin(&ready_list), struct thread, elem
+     );
+
+    if (thread_current()->priority < next_thread->priority) {
+      thread_yield();
+    }
+  }
 }
 
 /* Returns the current thread's nice value. */
@@ -481,30 +503,43 @@ thread_get_nice (void)
   return thread_current ()->nice;
 }
 
+/* Calculates new value of load_avg according to the formula: 
+   (59/60)*load_avg + (1/60)*ready_threads
+   where (59/60) is load_avg_coeff and (1/60) is ready_threads_coeff*/
+void
+recalculate_thread_load_avg(void) {
+  fp_t load_avg_coeff = DIV_FP_BY_INT(INT_TO_FP(59), 60);
+  fp_t ready_threads_coeff = DIV_FP_BY_INT(INT_TO_FP(1), 60);
+
+  int ready_threads = threads_ready();
+  if (thread_current() != idle_thread) {
+    ready_threads++;
+  }
+
+  load_avg_coeff = MULT_FPS(load_avg_coeff, load_avg);
+  ready_threads_coeff = MULT_FP_BY_INT(ready_threads_coeff, ready_threads);
+
+  load_avg = ADD_FPS(load_avg_coeff, ready_threads_coeff);
+}
+
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  return FP_TO_INT_ROUND_ZERO(
-    MULT_FP_BY_INT(
-      DIV_FP_BY_INT(
-        ADD_FP_AND_INT(
-          MULT_FP_BY_INT(load_avg, 59), threads_ready()), 
-        60), 
-      100)
-    );
+  return FP_TO_NEAREST_INT(MULT_FP_BY_INT(load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  return MULT_FP_BY_INT(100, thread_current()->recent_cpu);
+  return FP_TO_NEAREST_INT(MULT_FP_BY_INT(thread_current()->recent_cpu, 100));
 }
 
 // Updates the recent_cpu value of the specific thread
+// recent_cpu = (2*load_avg )/(2*load_avg + 1) * recent_cpu + nice
 void update_recent_cpu(struct thread *thread, void *aux UNUSED) {
-  fp_t avg_doubled = MULT_FP_BY_INT(thread_get_load_avg(), 2); 
+  fp_t avg_doubled = MULT_FP_BY_INT(load_avg, 2); 
   thread->recent_cpu = 
     ADD_FP_AND_INT( 
       MULT_FPS(
