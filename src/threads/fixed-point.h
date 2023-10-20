@@ -16,7 +16,7 @@ typedef int64_t fp_t;
 #define INT_TO_FP(N) ((N) * FP_F) 
 
 // Takes in FP and returns int
-#define FP_TO_INT_ROUND_ZERO(X) (X / FP_F) 
+#define FP_TO_INT_ROUND_ZERO(X) ((X) / FP_F) 
 
 // Takes in FP and returns int
 #define FP_TO_NEAREST_INT(X) (((X) >= 0) ? ((X + (FP_F / 2)) / FP_F) : \

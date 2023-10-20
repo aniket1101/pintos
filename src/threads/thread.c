@@ -427,18 +427,32 @@ thread_get_priority (void)
   return thread_current ()->priority; // TODO: make effective priority
 }
 
+// priority = PRI_MAX - (recent_cpu / 4) - (nice * 2),
 void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
-  int priority = 
-    FP_TO_INT_ROUND_ZERO(
-      -SUB_FP_AND_INT(
-        DIV_FP_BY_INT(thread->recent_cpu, 4), 
-        PRI_MAX - (thread->nice * 2)
-      )
-    );
+  // int priority = 
+  //   FP_TO_INT_ROUND_ZERO(
+  //       MULT_FP_BY_INT(
+  //         SUB_FP_AND_INT(
+  //           DIV_FP_BY_INT(thread->recent_cpu, 4), 
+  //           PRI_MAX - (thread->nice * 2)
+  //         ),
+  //         -1
+  //       )
+  //     );
 
-  thread->priority = CLAMP_PRI(priority);
+  // int priority = FP_TO_INT_ROUND_ZERO(SUB_FP_AND_INT(MULT_FP_BY_INT(SUB_FP_AND_INT(DIV_FP_BY_INT(thread->recent_cpu, 4), PRI_MAX), -1), (thread->nice) * 2));
+
+  // int max = -1 * PRI_MAX;
   
-
+  fp_t scaled_cpu = DIV_FP_BY_INT(thread->recent_cpu, 4);
+  int scaled_nice = (thread->nice) * 2;
+ 
+  fp_t first = SUB_FP_AND_INT(scaled_cpu, PRI_MAX);
+  fp_t half = MULT_FP_BY_INT(first, -1);
+  fp_t second = SUB_FP_AND_INT(half, scaled_nice);
+  int priority = FP_TO_INT_ROUND_ZERO(second);
+  //printf("Priority: %d\n", CLAMP_PRI(priority));
+  thread->priority = CLAMP_PRI(priority);
 }
 
 /* Sets the current thread's nice value to NICE. */
