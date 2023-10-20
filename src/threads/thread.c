@@ -108,7 +108,7 @@ thread_init (void)
   initial_thread->recent_cpu = 0;
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  load_avg = INT_TO_FP(0); // Initialise load_avg to 0 at the start of the program
+  load_avg = 0; // Initialise load_avg to 0 at the start of the program
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -168,23 +168,24 @@ recalculate_scheduler_values (void)
 {
   struct thread *current = thread_current();
 
-  // Recalculate priority for all threads on every fourth clock tick
-  if (timer_ticks() % TIME_SLICE == 0) {
-    thread_foreach(&recalculate_thread_priority, NULL);
-  }
+  /* Each time a timer interrupt occurs, recent cpu is incremented by 1 for the
+    running thread only, unless the idle thread is running.*/
+  if (current != idle_thread || !list_empty(&ready_list)) {
+    current->recent_cpu = ADD_FP_AND_INT(current->recent_cpu, 1);
+  } 
 
   /* Recalculate recent_cpu and load _avg when when the system tick counter  
      reaches a multiple of a second */ 
   if (timer_ticks() % TIMER_FREQ == 0) {
-    thread_foreach(&update_recent_cpu, NULL);
     recalculate_thread_load_avg();
+    thread_foreach(&update_recent_cpu, NULL);
   }
 
-  /* Each time a timer interrupt occurs, recent cpu is incremented by 1 for the
-    running thread only, unless the idle thread is running. */
-  if (thread_current() != idle_thread) {
-    current->recent_cpu = ADD_FP_AND_INT(current->recent_cpu, 1);
-  }
+  // Recalculate priority for all threads on every fourth clock tick
+  if (timer_ticks() % TIME_SLICE == 0) {
+    thread_foreach(&recalculate_thread_priority, NULL);
+  } 
+
 }
 
 /* Prints thread statistics. */
@@ -430,8 +431,8 @@ thread_get_priority (void)
 // priority = PRI_MAX - (recent_cpu / 4) - (nice * 2),
 void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   // int priority = 
-  //   FP_TO_INT_ROUND_ZERO(
-  //       MULT_FP_BY_INT(
+    //   FP_TO_INT_ROUND_ZERO(
+      //       MULT_FP_BY_INT(
   //         SUB_FP_AND_INT(
   //           DIV_FP_BY_INT(thread->recent_cpu, 4), 
   //           PRI_MAX - (thread->nice * 2)
@@ -453,7 +454,7 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   int priority = FP_TO_INT_ROUND_ZERO(second);
   //printf("Priority: %d\n", CLAMP_PRI(priority));
   thread->priority = CLAMP_PRI(priority);
-}
+  }
 
 /* Sets the current thread's nice value to NICE. */
 void
@@ -518,6 +519,7 @@ thread_get_recent_cpu (void)
 }
 
 // Updates the recent_cpu value of the specific thread
+// recent_cpu = (2*load_avg )/(2*load_avg + 1) * recent_cpu + nice
 void update_recent_cpu(struct thread *thread, void *aux UNUSED) {
   fp_t avg_doubled = MULT_FP_BY_INT(load_avg, 2); 
   thread->recent_cpu = 
