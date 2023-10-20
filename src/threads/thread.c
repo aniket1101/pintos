@@ -25,6 +25,8 @@
 #define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
 #define CLAMP_PRI(val) (CLAMP(val, PRI_MIN, PRI_MAX)) // Clamp a priority
 
+#define MAX(a, b) ((a > b) ? a : b)
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -234,7 +236,7 @@ thread_create (const char *name, int priority,
     t->nice = thread_current()->nice;
     t->recent_cpu = thread_current()->recent_cpu;
     recalculate_thread_priority(t, NULL);
-    init_thread (t, name, t->priority);
+    init_thread (t, name, t->base_priority);
     tid = t->tid = allocate_tid ();      
   } else {
     init_thread (t, name, priority);
@@ -286,11 +288,18 @@ thread_block (void)
   schedule ();
 }
 
-// Auxilliary function to compare priorities used to sort the ready lists
+// Removes maximal element from a list and returns it
+static struct list_elem *remove_max(struct list *list, list_less_func *less) {
+  struct list_elem *elem = list_max(list, less, NULL);
+  list_remove(elem);
+  return elem;
+}
+
+/* Compares a threads effective priority from its locks. */
 bool thread_less(const struct list_elem *a, 
     const struct list_elem *b, void *aux UNUSED) {
-  return list_entry(a, struct thread, elem)->priority 
-      <= list_entry(b, struct thread, elem)->priority;
+  return list_entry(a, struct thread, elem)->eff_priority
+    < list_entry(b, struct thread, elem)->eff_priority;
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -311,7 +320,8 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   // Insert current thread into ready_list in correct priority position 
-  list_insert_ordered(&ready_list, &(t->elem), &thread_less, NULL);  t->status = THREAD_READY;
+  list_push_back(&ready_list, &(t->elem));  
+  t->status = THREAD_READY;
   intr_set_level (old_level);
 }
 
@@ -382,7 +392,7 @@ thread_yield (void)
   old_level = intr_disable ();
   
   if (cur != idle_thread) { 
-    list_insert_ordered(&ready_list, &(cur->elem), &thread_less, NULL);
+    list_push_back(&ready_list, &(cur->elem));
 }
 
   cur->status = THREAD_READY;
@@ -413,19 +423,27 @@ thread_set_priority (int new_priority)
 {
   // If we're using advanced scheduler, ignore calls to thread_set_priority
   if (!thread_mlfqs) {
-    thread_current ()->priority = CLAMP_PRI(new_priority); // Set thread's priority 
-    
+    thread_current ()->base_priority = CLAMP_PRI(new_priority); // Set thread's priority 
+    thread_set_eff_priority();
     if (!intr_context()) { // If not running from an interrupt...
       thread_yield(); // ...yield to next thread
     }
   }  
 }
 
+void thread_set_eff_priority() {
+  thread_current()->eff_priority 
+    = MAX(thread_current()->base_priority, 
+      (list_empty(&(thread_current()->held_locks)) ? PRI_MIN : 
+        list_entry(list_max(&(thread_current()->held_locks), &lock_less, NULL), 
+          struct lock, elem)->eff_priority));
+}
+
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority; // TODO: make effective priority
+  return thread_current ()->eff_priority;
 }
 
 void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
@@ -440,7 +458,7 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   if (thread == thread_current()) {
     thread_set_priority(priority);
   } else {
-    thread->priority = CLAMP_PRI(priority);
+    thread->base_priority = CLAMP_PRI(priority);
   }
 }
 
@@ -581,7 +599,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
-  t->priority = priority;
+  t->base_priority = priority;
+  t->eff_priority = priority;
+  list_init(&t->held_locks);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -612,8 +632,10 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else
-    return list_entry (list_pop_back (&ready_list), struct thread, elem);
+  else {
+    return list_entry(
+      remove_max(&ready_list, &thread_less), struct thread, elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
