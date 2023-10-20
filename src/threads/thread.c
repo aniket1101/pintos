@@ -471,7 +471,7 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   // fp_t second = SUB_FP_AND_INT(half, scaled_nice);
   // int priority = FP_TO_INT_ROUND_ZERO(second);
   // printf("Priority: %d\n", CLAMP_PRI(priority));
-  thread->priority = CLAMP_PRI(priority);
+  thread->base_priority = CLAMP_PRI(priority);
   }
 
 /* Sets the current thread's nice value to NICE. */
@@ -490,7 +490,7 @@ thread_set_nice (int nice)
       list_begin(&ready_list), struct thread, elem
      );
 
-    if (thread_current()->priority < next_thread->priority) {
+    if (thread_current()->base_priority < next_thread->base_priority) {
       thread_yield();
     }
   }
