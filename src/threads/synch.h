@@ -22,16 +22,11 @@ struct lock
   {
     struct thread *holder;      /* Thread holding lock (for debugging). */
     struct semaphore semaphore; /* Binary semaphore controlling access. */
-    struct list_elem elem;      /* Allows list of locks*/
-    int eff_pri;           /* Holds highest priority of all waiting threads*/
+    struct list_elem elem;      /* Allows list of locks. */
+    int eff_priority;           /* Holds highest priority of all waiting threads*/
   };
 
-/* Lock_elem to be able to have a lock list. */
-struct lock_elem {
-  struct lock *lock;
-  struct list_elem elem;
-};
-
+void lock_set_eff_priority(struct lock *lock);
 
 void lock_init (struct lock *);
 void lock_acquire (struct lock *);

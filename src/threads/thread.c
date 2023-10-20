@@ -25,7 +25,7 @@
 #define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
 #define CLAMP_PRI(val) (CLAMP(val, PRI_MIN, PRI_MAX)) // Clamp a priority
 
-#define MAX(a, b) (a > b ? a : b)
+#define MAX(a, b) ((a > b) ? a : b)
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
@@ -279,7 +279,7 @@ thread_block (void)
 }
 
 // Removes maximal element from a list and returns it
-static struct list_elem * remove_max(struct list *list, list_less_func *less) {
+static struct list_elem *remove_max(struct list *list, list_less_func *less) {
   struct list_elem *elem = list_max(list, less, NULL);
   list_remove(elem);
   return elem;

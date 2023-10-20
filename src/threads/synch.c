@@ -55,21 +55,6 @@ sema_init (struct semaphore *sema, unsigned value)
   list_init (&sema->waiters);
 }
 
-/* To compare the effective priorities in locks. */
-bool lock_less(const struct list_elem *a, 
-    const struct list_elem *b, void *aux UNUSED) {
-      struct lock *lock_a = list_entry(a, struct lock, elem);
-      struct lock *lock_b = list_entry(b, struct lock, elem);
-  if (!PRI_VALID(lock_a->eff_pri)) {
-    // recalculate effective priority
-  } 
-  if (!PRI_VALID(lock_b->eff_pri)) {
-    // recalculate effective priority
-  } 
-
-  return lock_a->eff_pri < lock_b->eff_pri;
-}
-
 /* Down or "P" operation on a semaphore.  Waits for SEMA's value
    to become positive and then atomically decrements it.
 
@@ -224,8 +209,9 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
-
+  
   sema_down (&lock->semaphore);
+  list_push_back(&(thread_current()->held_locks), &(lock->elem));
   lock->holder = thread_current ();
 }
 
@@ -244,8 +230,10 @@ lock_try_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   success = sema_try_down (&lock->semaphore);
-  if (success)
+  if (success) {
+    list_push_back(&(thread_current()->held_locks), &(lock->elem));
     lock->holder = thread_current ();
+  }
   return success;
 }
 
@@ -261,6 +249,8 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   lock->holder = NULL;
+  list_remove(&lock->elem);
+  thread_set_eff_priority();
   sema_up (&lock->semaphore);
 }
 
@@ -273,6 +263,22 @@ lock_held_by_current_thread (const struct lock *lock)
   ASSERT (lock != NULL);
 
   return lock->holder == thread_current ();
+}
+
+/* To compare the effective priorities in locks. */
+bool lock_less(const struct list_elem *a, 
+    const struct list_elem *b, void *aux UNUSED) {
+  struct lock *lock_a = list_entry(a, struct lock, elem);
+  struct lock *lock_b = list_entry(b, struct lock, elem);
+
+  return lock_a->eff_priority < lock_b->eff_priority;
+}
+
+/* Sets locks effective priority. */
+void lock_set_eff_priority(struct lock *lock) {
+  lock->eff_priority = list_empty(&(lock->semaphore.waiters)) ? 
+    PRI_MIN : list_entry(list_back(&(lock->semaphore.waiters)), 
+                          struct thread, elem)->eff_priority;
 }
 
 /* One semaphore in a list. */

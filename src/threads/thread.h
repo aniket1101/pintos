@@ -102,8 +102,8 @@ struct thread
 
     int nice;                           /* Niceness value. */
     fp_t recent_cpu;                    /* recent_cpu fixed point value. */
-    struct list lock_elems;             /* For effective priority calculation. */
-
+    struct list held_locks;             /* For effective priority calculation. */
+   
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
