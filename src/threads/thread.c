@@ -25,6 +25,8 @@
 #define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
 #define CLAMP_PRI(val) (CLAMP(val, PRI_MIN, PRI_MAX)) // Clamp a priority
 
+#define MAX(a, b) (a > b ? a : b)
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -286,11 +288,8 @@ static struct list_elem * remove_max(struct list *list, list_less_func *less) {
 /* Compares a threads effective priority from its locks. */
 bool thread_less(const struct list_elem *a, 
     const struct list_elem *b, void *aux UNUSED) {
-      //gets thread, max eff pri in locks list, gets that locks eff pri
-  return (list_entry(list_max(&(list_entry(a, struct thread, elem)->lock_elems), 
-  &lock_less, NULL), struct lock, elem))->eff_pri
-      <= (list_entry(list_max(&(list_entry(b, struct thread, elem)->lock_elems), 
-      &lock_less, NULL), struct lock, elem))->eff_pri;
+  return list_entry(a, struct thread, elem)->eff_priority
+    < list_entry(b, struct thread, elem)->eff_priority;
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -412,18 +411,26 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = CLAMP_PRI(new_priority); // Set thread's priority 
-  
+  thread_current ()->base_priority = CLAMP_PRI(new_priority); // Set thread's priority 
+  thread_set_eff_priority();
   if (!intr_context()) { // If not running from an interrupt...
     thread_yield(); // ...yield to next thread
   }
+}
+
+void thread_set_eff_priority() {
+  thread_current()->eff_priority 
+    = MAX(thread_current()->base_priority, 
+      (list_empty(&(thread_current()->held_locks)) ? PRI_MIN : 
+        list_entry(list_max(&(thread_current()->held_locks), &lock_less, NULL), 
+          struct lock, elem)->eff_priority));
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority; // TODO: make effective priority
+  return thread_current ()->eff_priority;
 }
 
 void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
@@ -438,7 +445,7 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   if (thread == thread_current()) {
     thread_set_priority(priority);
   } else {
-    thread->priority = CLAMP_PRI(priority);
+    thread->base_priority = CLAMP_PRI(priority);
   }
 }
 
@@ -578,7 +585,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
-  t->priority = priority;
+  t->base_priority = priority;
+  t->eff_priority = priority;
+  list_init(&t->held_locks);
   t->magic = THREAD_MAGIC;
 
   old_level = intr_disable ();
@@ -610,8 +619,8 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else {
-    return list_entry(remove_max(&ready_list, thread_less), struct thread, 
-                                                                        elem);
+    return list_entry(
+      remove_max(&ready_list, &thread_less), struct thread, elem);
   }
 }
 
