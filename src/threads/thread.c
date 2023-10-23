@@ -172,7 +172,7 @@ recalculate_scheduler_values (void)
 
   /* Each time a timer interrupt occurs, recent cpu is incremented by 1 for the
     running thread only, unless the idle thread is running.*/
-  if (current != idle_thread || !list_empty(&ready_list)) {
+  if (current != idle_thread) {
     current->recent_cpu = ADD_FP_AND_INT(current->recent_cpu, 1);
   } 
 
@@ -471,8 +471,8 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   // fp_t second = SUB_FP_AND_INT(half, scaled_nice);
   // int priority = FP_TO_INT_ROUND_ZERO(second);
   // printf("Priority: %d\n", CLAMP_PRI(priority));
-  thread->base_priority = CLAMP_PRI(priority);
-  }
+  thread->base_priority = CLAMP_PRI(priority); 
+}
 
 /* Sets the current thread's nice value to NICE. */
 void
@@ -485,15 +485,7 @@ thread_set_nice (int nice)
   thread_current()->nice = nice; // Set the thread's niceness
   recalculate_thread_priority(thread_current (), NULL); // Recalculate priority
   
-  if (!list_empty(&ready_list)) {
-     struct thread *next_thread = list_entry(
-      list_begin(&ready_list), struct thread, elem
-     );
-
-    if (thread_current()->base_priority < next_thread->base_priority) {
-      thread_yield();
-    }
-  }
+  thread_yield();
 }
 
 /* Returns the current thread's nice value. */
