@@ -287,8 +287,8 @@ thread_block (void)
 }
 
 // Removes maximal element from a list and returns it
-static struct list_elem *remove_max(struct list *list, list_less_func *less) {
-  struct list_elem *elem = list_max(list, less, NULL);
+struct list_elem *list_pop_max(struct list *list, list_less_func *less, void *aux) {
+  struct list_elem *elem = list_max(list, less, aux);
   list_remove(elem);
   return elem;
 }
@@ -662,7 +662,7 @@ next_thread_to_run (void)
     return idle_thread;
   else {
     return list_entry(
-      remove_max(&ready_list, &thread_less), struct thread, elem);
+      list_pop_max(&ready_list, &thread_less, NULL), struct thread, elem);
   }
 }
 

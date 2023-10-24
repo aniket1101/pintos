@@ -160,5 +160,6 @@ void update_recent_cpu(struct thread *thread, void *aux UNUSED);
 void recalculate_scheduler_values (void);
 
 bool thread_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED); 
+struct list_elem *list_pop_max(struct list *list, list_less_func *less, void *aux UNUSED);
 
 #endif /* threads/thread.h */

@@ -77,8 +77,7 @@ sema_down (struct semaphore *sema)
   
   while (sema->value == 0) {
     // Insert current thread into waiters in correct priority position 
-    list_insert_ordered (&sema->waiters, &thread_current ()->elem, 
-      &thread_less, NULL);
+    list_push_back (&sema->waiters, &thread_current ()->elem);
     thread_block ();
   }
   
@@ -125,7 +124,7 @@ sema_up (struct semaphore *sema)
   old_level = intr_disable ();
   if (!list_empty (&sema->waiters)) {
     // Unblock the semaphore's highest priority waiting thread
-    thread_unblock (list_entry (list_pop_back (&sema->waiters),
+    thread_unblock (list_entry (list_pop_max (&sema->waiters, &thread_less, NULL),
                                 struct thread, elem));
   } 
 
