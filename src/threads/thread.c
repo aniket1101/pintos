@@ -179,11 +179,22 @@ recalculate_scheduler_values (void)
   if (timer_ticks() % TIMER_FREQ == 0) {
     recalculate_thread_load_avg();
     thread_foreach(&update_recent_cpu, NULL);
+
+    /* Recalculate priority for all threads on every fourth clock tick, noting
+    that the priority for a thread only changes when its recent_cpu changes*/
+    // thread_foreach(&recalculate_thread_priority, NULL);
+    struct list_elem *curr;
+    for (curr = list_begin (&ready_list); curr != list_end (&ready_list);
+       curr = list_next (curr))
+    {
+      struct thread *thread = list_entry(curr, struct thread, elem);
+      recalculate_thread_priority(thread, NULL);
+    }
   }
 
-  // Recalculate priority for all threads on every fourth clock tick
+  
   if (timer_ticks() % TIME_SLICE == 0) {
-    thread_foreach(&recalculate_thread_priority, NULL);
+    recalculate_thread_priority(thread_current(), NULL);
   } 
 
 }
@@ -460,18 +471,6 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
         )
       );
 
-  // int priority = FP_TO_INT_ROUND_ZERO(SUB_FP_AND_INT(MULT_FP_BY_INT(SUB_FP_AND_INT(DIV_FP_BY_INT(thread->recent_cpu, 4), PRI_MAX), -1), (thread->nice) * 2));
-
-  // int max = -1 * PRI_MAX;
-  
-  // fp_t scaled_cpu = DIV_FP_BY_INT(thread->recent_cpu, 4);
-  // int scaled_nice = (thread->nice) * 2;
- 
-  // fp_t first = SUB_FP_AND_INT(scaled_cpu, PRI_MAX);
-  // fp_t half = MULT_FP_BY_INT(first, -1);
-  // fp_t second = SUB_FP_AND_INT(half, scaled_nice);
-  // int priority = FP_TO_INT_ROUND_ZERO(second);
-  // printf("Priority: %d\n", CLAMP_PRI(priority));
   thread->base_priority = CLAMP_PRI(priority); 
 }
 
