@@ -118,7 +118,7 @@ struct thread
    Controlled by kernel command-line option "mlfqs". */
 extern bool thread_mlfqs;
 
-void thread_set_eff_priority(void);
+void thread_set_eff_priority(struct thread *);
 
 void thread_init (void);
 void thread_start (void);

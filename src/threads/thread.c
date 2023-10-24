@@ -424,19 +424,19 @@ thread_set_priority (int new_priority)
   // If we're using advanced scheduler, ignore calls to thread_set_priority
   if (!thread_mlfqs) {
     thread_current ()->base_priority = CLAMP_PRI(new_priority); // Set thread's priority 
-    thread_set_eff_priority();
+    thread_set_eff_priority(thread_current());
     if (!intr_context()) { // If not running from an interrupt...
       thread_yield(); // ...yield to next thread
     }
   }  
 }
 
-void thread_set_eff_priority() {
-  thread_current()->eff_priority 
-    = MAX(thread_current()->base_priority, 
-      (list_empty(&(thread_current()->held_locks)) ? PRI_MIN : 
-        list_entry(list_max(&(thread_current()->held_locks), &lock_less, NULL), 
-          struct lock, elem)->eff_priority));
+void thread_set_eff_priority(struct thread *thread) {
+  thread->eff_priority 
+    = MAX(thread->base_priority, (list_empty(&(thread->held_locks)) ? 
+      PRI_MIN : 
+      list_entry(list_max(&(thread->held_locks), &lock_less, NULL), 
+        struct lock, elem)->eff_priority));
 }
 
 /* Returns the current thread's priority. */

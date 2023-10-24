@@ -210,6 +210,13 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
   
+  lock->eff_priority = lock_get_max_waiter_priority(lock);
+  if (lock->holder != NULL) { // Will be a waiter
+    lock->eff_priority = MAX(thread_current()->eff_priority, lock->eff_priority);
+    thread_set_eff_priority(lock->holder);
+  } 
+
+  thread_set_eff_priority(thread_current());
   sema_down (&lock->semaphore);
   list_push_back(&(thread_current()->held_locks), &(lock->elem));
   lock->holder = thread_current ();
@@ -250,7 +257,8 @@ lock_release (struct lock *lock)
 
   lock->holder = NULL;
   list_remove(&lock->elem);
-  thread_set_eff_priority();
+  lock->eff_priority = lock_get_max_waiter_priority(lock);
+  thread_set_eff_priority(thread_current());  
   sema_up (&lock->semaphore);
 }
 
@@ -274,11 +282,10 @@ bool lock_less(const struct list_elem *a,
   return lock_a->eff_priority < lock_b->eff_priority;
 }
 
-/* Sets locks effective priority. */
-void lock_set_eff_priority(struct lock *lock) {
-  lock->eff_priority = list_empty(&(lock->semaphore.waiters)) ? 
-    PRI_MIN : list_entry(list_back(&(lock->semaphore.waiters)), 
-                          struct thread, elem)->eff_priority;
+int lock_get_max_waiter_priority(struct lock *lock) {
+    return list_empty(&(lock->semaphore.waiters)) ? PRI_MIN : 
+      list_entry(list_back(&(lock->semaphore.waiters)), 
+                  struct thread, elem)->eff_priority;
 }
 
 /* One semaphore in a list. */
