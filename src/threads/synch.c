@@ -224,14 +224,16 @@ lock_acquire (struct lock *lock)
     }
 
     lock_set_eff_priority(lock); // Set this lock's priority and propagate
-  } else {
-    lock->eff_priority = lock_get_max_waiter_priority(lock);
   }
 
   sema_down (&lock->semaphore);
+  lock->holder = thread_current ();
+  
   // Add this lock to the current thread's held_locks
   list_push_back(&(thread_current()->held_locks), &(lock->elem)); 
-  lock->holder = thread_current ();
+  
+  // Now holding, recalculate eff_priority
+  lock->eff_priority = lock_get_max_waiter_priority(lock); 
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
