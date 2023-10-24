@@ -32,8 +32,6 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
-#define SEMA_ELEM_WAITERS(sema_elem) ((list_entry(sema_elem, struct semaphore_elem, elem)->semaphore).waiters) 
-
 // Checks if a priority is valid
 #define PRI_VALID(x) (x > PRI_MIN && x < PRI_MAX)
 
@@ -329,9 +327,12 @@ struct semaphore_elem
    has a higher priority waiter */
 static bool sema_elem_less(const struct list_elem *a, 
     const struct list_elem *b, void *aux UNUSED) {
+  struct semaphore *sema_a = &list_entry(a, struct semaphore_elem, elem)->semaphore; 
+  struct semaphore *sema_b = &list_entry(b, struct semaphore_elem, elem)->semaphore; 
+
   return thread_less(
-    list_back (&SEMA_ELEM_WAITERS(a)),
-    list_back (&SEMA_ELEM_WAITERS(b)), NULL);
+    list_back (&sema_a->waiters),
+    list_back (&sema_b->waiters), NULL);
 }
 
 /* Initializes condition variable COND.  A condition variable
@@ -398,12 +399,9 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (lock_held_by_current_thread (lock));
 
   if (!list_empty (&cond->waiters)) {
-    struct list_elem *max_elem = // Find waiter with highest priority thread
-      list_max(&cond->waiters, &sema_elem_less, NULL);
-    list_remove (max_elem); // Remove maximum semaphore
-
     // Wake up the highest priority waiter
-    sema_up (&(list_entry (max_elem, struct semaphore_elem, elem)->semaphore));
+    sema_up (&(list_entry (list_pop_max(&cond->waiters, &sema_elem_less, NULL), 
+      struct semaphore_elem, elem)->semaphore));
   } 
 
   thread_yield(); // Yield in case this new sema waiter
