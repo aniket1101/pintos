@@ -38,6 +38,7 @@
 #define PRI_VALID(x) (x > PRI_MIN && x < PRI_MAX)
 
 static int lock_get_max_waiter_priority(struct lock *lock);
+static void lock_set_eff_priority(struct lock *lock);
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -194,6 +195,7 @@ lock_init (struct lock *lock)
   ASSERT (lock != NULL);
 
   lock->holder = NULL;
+  lock->holder_waiting_on = NULL;
   sema_init (&lock->semaphore, 1);
 }
 
@@ -212,15 +214,23 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
   
-  lock->eff_priority = lock_get_max_waiter_priority(lock);
-  if (lock->holder != NULL) { // Will be a waiter
-    lock->eff_priority = MAX(thread_current()->eff_priority, lock->eff_priority);
-    thread_set_eff_priority(lock->holder);
-  } 
+  if (lock->holder != NULL) { // If thread will wait before acquiring
+    for (struct list_elem *cur = list_begin(&thread_current()->held_locks); 
+        cur != list_end(&thread_current()->held_locks); 
+        cur = list_next(cur)) {
+      /* Each lock held by this thread is notified its holder 
+         will be waiting on this lock */ 
+      list_entry(cur, struct lock, elem)->holder_waiting_on = lock; 
+    }
 
-  thread_set_eff_priority(thread_current());
+    lock_set_eff_priority(lock); // Set this lock's priority and propagate
+  } else {
+    lock->eff_priority = lock_get_max_waiter_priority(lock);
+  }
+
   sema_down (&lock->semaphore);
-  list_push_back(&(thread_current()->held_locks), &(lock->elem));
+  // Add this lock to the current thread's held_locks
+  list_push_back(&(thread_current()->held_locks), &(lock->elem)); 
   lock->holder = thread_current ();
 }
 
@@ -258,9 +268,10 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   lock->holder = NULL;
-  list_remove(&lock->elem);
-  lock->eff_priority = lock_get_max_waiter_priority(lock);
-  thread_set_eff_priority(thread_current());  
+  // Update lock's effective priority without propagation
+  lock->eff_priority = lock_get_max_waiter_priority(lock); 
+  list_remove(&lock->elem); // Remove lock from thread's held_locks list 
+  thread_set_eff_priority(thread_current()); // Update old holder's priority
   sema_up (&lock->semaphore);
 }
 
@@ -284,6 +295,21 @@ bool lock_less(const struct list_elem *a,
   return lock_a->eff_priority < lock_b->eff_priority;
 }
 
+/* Sets locks effective priority. */
+void lock_set_eff_priority(struct lock *lock) {
+  if (lock != NULL) {
+    // Set the correct eff_priority of the lock 
+    lock->eff_priority = MAX(
+      thread_current()->eff_priority, 
+      lock_get_max_waiter_priority(lock));
+    
+    // Propagate upwards
+    thread_set_eff_priority(lock->holder); 
+    lock_set_eff_priority(lock->holder_waiting_on);
+  }
+}
+
+// Return the effective priority of the highest priority thread waiting on lock
 int lock_get_max_waiter_priority(struct lock *lock) {
     return list_empty(&(lock->semaphore.waiters)) ? PRI_MIN : 
       list_entry(list_back(&(lock->semaphore.waiters)), 

@@ -451,7 +451,7 @@ thread_get_priority (void)
 void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   int priority = 
       FP_TO_INT_ROUND_ZERO(
-            MULT_FP_BY_INT(
+        MULT_FP_BY_INT(
           SUB_FP_AND_INT(
             DIV_FP_BY_INT(thread->recent_cpu, 4), 
             PRI_MAX - (thread->nice * 2)
