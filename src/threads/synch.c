@@ -37,6 +37,8 @@
 // Checks if a priority is valid
 #define PRI_VALID(x) (x > PRI_MIN && x < PRI_MAX)
 
+static int lock_get_max_waiter_priority(struct lock *lock);
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:

@@ -25,8 +25,6 @@
 #define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
 #define CLAMP_PRI(val) (CLAMP(val, PRI_MIN, PRI_MAX)) // Clamp a priority
 
-#define MAX(a, b) ((a > b) ? a : b)
-
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
