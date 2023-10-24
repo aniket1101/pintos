@@ -296,8 +296,11 @@ static struct list_elem *remove_max(struct list *list, list_less_func *less) {
 /* Compares a threads effective priority from its locks. */
 bool thread_less(const struct list_elem *a, 
     const struct list_elem *b, void *aux UNUSED) {
-  return list_entry(a, struct thread, elem)->eff_priority
-    < list_entry(b, struct thread, elem)->eff_priority;
+  struct thread *thread_a = list_entry(a, struct thread, elem);
+  struct thread *thread_b = list_entry(b, struct thread, elem);
+  return (thread_mlfqs) ? 
+    thread_a->base_priority < thread_b->base_priority :
+    thread_a->eff_priority < thread_b->eff_priority;
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
