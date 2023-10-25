@@ -120,16 +120,18 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
+  bool should_yield = false;
   if (!list_empty (&sema->waiters)) {
     // Unblock the semaphore's highest priority waiting thread
-    thread_unblock (list_entry (list_pop_max (&sema->waiters, &thread_less, NULL),
-                                struct thread, elem));
+    struct thread *next_to_run = ELEM_TO_THREAD(list_pop_max (&sema->waiters, &thread_less, NULL));
+    thread_unblock (next_to_run);
+    should_yield = thread_current()->eff_priority < next_to_run->eff_priority;
   } 
 
-  sema->value++;
+  sema->value++;  
   intr_set_level (old_level);
 
-  if (!intr_context()) { // If not called from an interrupt...
+  if (!intr_context() && should_yield) { // If not called from an interrupt...
     thread_yield(); // Yield CPU to the next thread
   }
 }
