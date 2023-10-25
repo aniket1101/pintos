@@ -187,7 +187,7 @@ recalculate_scheduler_values (void)
     for (curr = list_begin (&ready_list); curr != list_end (&ready_list);
        curr = list_next (curr))
     {
-      struct thread *thread = list_entry(curr, struct thread, elem);
+      struct thread *thread = ELEM_TO_THREAD(curr);
       recalculate_thread_priority(thread, NULL);
     }
   }
@@ -307,8 +307,8 @@ struct list_elem *list_pop_max(struct list *list, list_less_func *less, void *au
 /* Compares a threads effective priority from its locks. */
 bool thread_less(const struct list_elem *a, 
     const struct list_elem *b, void *aux UNUSED) {
-  struct thread *thread_a = list_entry(a, struct thread, elem);
-  struct thread *thread_b = list_entry(b, struct thread, elem);
+  struct thread *thread_a = ELEM_TO_THREAD(a);
+  struct thread *thread_b = ELEM_TO_THREAD(b);
   return (thread_mlfqs) ? 
     thread_a->base_priority < thread_b->base_priority :
     thread_a->eff_priority < thread_b->eff_priority;
@@ -447,8 +447,7 @@ void thread_set_eff_priority(struct thread *thread) {
   thread->eff_priority 
     = MAX(thread->base_priority, (list_empty(&(thread->held_locks)) ? 
       PRI_MIN : 
-      list_entry(list_max(&(thread->held_locks), &lock_less, NULL), 
-        struct lock, elem)->eff_priority));
+      ELEM_TO_LOCK(list_max(&(thread->held_locks), &lock_less, NULL))->eff_priority));
 }
 
 /* Returns the current thread's priority. */
@@ -660,8 +659,7 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else {
-    return list_entry(
-      list_pop_max(&ready_list, &thread_less, NULL), struct thread, elem);
+    return ELEM_TO_THREAD(list_pop_max(&ready_list, &thread_less, NULL));
   }
 }
 

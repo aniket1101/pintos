@@ -8,6 +8,9 @@
 
 #define MAX(a, b) ((a > b) ? a : b)
 
+// Converts list_elem to thread
+#define ELEM_TO_THREAD(thr) (list_entry(thr, struct thread, elem))
+
 /* States in a thread's life cycle. */
 enum thread_status
   {

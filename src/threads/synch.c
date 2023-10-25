@@ -219,7 +219,7 @@ lock_acquire (struct lock *lock)
         cur = list_next(cur)) {
       /* Each lock held by this thread is notified its holder 
          will be waiting on this lock */ 
-      list_entry(cur, struct lock, elem)->holder_waiting_on = lock; 
+      ELEM_TO_LOCK(cur)->holder_waiting_on = lock;
     }
 
     lock_set_eff_priority(lock); // Set this lock's priority and propagate
@@ -290,8 +290,8 @@ lock_held_by_current_thread (const struct lock *lock)
 /* To compare the effective priorities in locks. */
 bool lock_less(const struct list_elem *a, 
     const struct list_elem *b, void *aux UNUSED) {
-  struct lock *lock_a = list_entry(a, struct lock, elem);
-  struct lock *lock_b = list_entry(b, struct lock, elem);
+  struct lock *lock_a = ELEM_TO_LOCK(a);
+  struct lock *lock_b = ELEM_TO_LOCK(b);
 
   return lock_a->eff_priority < lock_b->eff_priority;
 }
@@ -313,8 +313,7 @@ void lock_set_eff_priority(struct lock *lock) {
 // Return the effective priority of the highest priority thread waiting on lock
 int lock_get_max_waiter_priority(struct lock *lock) {
     return list_empty(&(lock->semaphore.waiters)) ? PRI_MIN : 
-      list_entry(list_back(&(lock->semaphore.waiters)), 
-                  struct thread, elem)->eff_priority;
+      ELEM_TO_THREAD(list_back(&(lock->semaphore.waiters)))->eff_priority;
 }
 
 /* One semaphore in a list. */

@@ -4,6 +4,9 @@
 #include <list.h>
 #include <stdbool.h>
 
+// Converts list_elem to lock
+#define ELEM_TO_LOCK(lck) (list_entry(lck, struct lock, elem))
+
 /* A counting semaphore. */
 struct semaphore 
   {
