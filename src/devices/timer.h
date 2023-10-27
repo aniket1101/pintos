@@ -8,19 +8,19 @@
 /* Number of timer interrupts per second. */
 #define TIMER_FREQ 100
 
+// Struct to track when waiting threads should be woken up
+struct alarm { 
+    struct list_elem elem;            // List element for asleep_lists
+    struct semaphore *const sema;     // Semaphore to call sema_up() on
+
+    const int64_t alarm_time;         // Time to wake up the thread
+};
+
 void timer_init (void);
 void timer_calibrate (void);
 
 int64_t timer_ticks (void);
 int64_t timer_elapsed (int64_t);
-
-/* Structure to keep track of sleeping threads */
-struct sleeping_thread
-{
-  int64_t wake_time;            /* Wake up time in timer ticks */
-  struct semaphore sema;       /* Semaphore for  blocking */
-  struct list_elem elem;        /* List element for sleeping_threads list */
-};
 
 
 /* Sleep and yield the CPU to other threads. */
