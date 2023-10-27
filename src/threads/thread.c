@@ -66,7 +66,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 bool thread_mlfqs;
 
 static fp_t load_avg;           /* load_avg global fixed point variable */
-static struct thread *currents[4]; /* stores threads that have run in this slice*/
+static struct thread *currents[4]; //stores threads that have run in this slice
 
 static void kernel_thread (thread_func *, void *aux);
 
