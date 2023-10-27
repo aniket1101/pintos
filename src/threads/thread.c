@@ -1,4 +1,5 @@
 #include "threads/thread.h"
+#include <stdlib.h>
 #include <debug.h>
 #include <stddef.h>
 #include <random.h>
@@ -65,7 +66,7 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 bool thread_mlfqs;
 
 static fp_t load_avg;           /* load_avg global fixed point variable */
-
+static struct thread *currents[4]; /* stores threads that have run in this slice*/
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -78,6 +79,9 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
+
+
+static int isEqual(const void *t1, const void *t2);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -161,6 +165,11 @@ thread_tick (void)
     intr_yield_on_return ();
 }
 
+int isEqual(const void *t1, const void *t2) {
+  if (is_thread(t1 && is_thread(t2))) return t1 == t2; 
+  else return -1;
+  }
+
 /* Recalculates the priority, recent_cpu and load_avg at each timer 
    interrupt. */
 void
@@ -172,6 +181,7 @@ recalculate_scheduler_values (void)
     running thread only, unless the idle thread is running.*/
   if (current != idle_thread) {
     current->recent_cpu = ADD_FP_AND_INT(current->recent_cpu, 1);
+    currents[timer_ticks() % TIME_SLICE] = current;
   } 
 
   /* Recalculate recent_cpu and load _avg when when the system tick counter  
@@ -182,19 +192,15 @@ recalculate_scheduler_values (void)
 
     /* Recalculate priority for all threads on every fourth clock tick, noting
     that the priority for a thread only changes when its recent_cpu changes*/
-    // thread_foreach(&recalculate_thread_priority, NULL);
-    struct list_elem *curr;
-    for (curr = list_begin (&ready_list); curr != list_end (&ready_list);
-       curr = list_next (curr))
-    {
-      struct thread *thread = ELEM_TO_THREAD(curr);
-      recalculate_thread_priority(thread, NULL);
+  } else if (timer_ticks() % TIME_SLICE == 0) {
+     
+    qsort(currents, TIME_SLICE, sizeof(struct thread *), isEqual);
+    recalculate_thread_priority(currents[0], NULL);
+    for (int i = 0;  i < TIME_SLICE; i++) {
+      if (currents[i] != currents[i - 1]) {
+        recalculate_thread_priority(currents[i], NULL);
+      }
     }
-  }
-
-  
-  if (timer_ticks() % TIME_SLICE == 0) {
-    recalculate_thread_priority(thread_current(), NULL);
   } 
 
 }
@@ -405,7 +411,7 @@ thread_yield (void)
   
   if (cur != idle_thread) { 
     list_push_back(&ready_list, &(cur->elem));
-}
+  }
 
   cur->status = THREAD_READY;
   schedule ();
@@ -474,6 +480,8 @@ void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
 }
 
 /* Sets the current thread's nice value to NICE. */
+
+// May need to disable interrupts
 void
 thread_set_nice (int nice) 
 {
@@ -538,6 +546,7 @@ void update_recent_cpu(struct thread *thread, void *aux UNUSED) {
         thread->recent_cpu),
       thread->nice
     );
+  recalculate_thread_priority(thread, NULL);
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
