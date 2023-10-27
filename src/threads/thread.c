@@ -213,9 +213,9 @@ recalculate_scheduler_values (void)
     recalculate_thread_priority(currents[0], NULL);
     
     /* Updates the rest of threads that have run */
-    for (int i = 0;  i < TIME_SLICE; i++) {
+    for (int i = 1;  i < TIME_SLICE; i++) {
       /* Checks whether we have already updated the thread*/
-      if (currents[i] != currents[i - 1]) {
+      if (currents[i] != currents[i - 1] && currents[i] != idle_thread) {
         recalculate_thread_priority(currents[i], NULL);
       }
     }
@@ -559,7 +559,7 @@ recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice */
 void update_recent_cpu(struct thread *thread, void *aux UNUSED) {
   fp_t avg_doubled = MULT_FP_BY_INT(load_avg, 2); 
   fp_t recent_coeff = DIV_FPS(avg_doubled, ADD_FP_AND_INT(avg_doubled, 1));
-  
+
   thread->recent_cpu = 
     ADD_FP_AND_INT(MULT_FPS(recent_coeff, thread->recent_cpu), thread->nice);
 
