@@ -313,7 +313,8 @@ void lock_set_eff_priority(struct lock *lock) {
 // Return the effective priority of the highest priority thread waiting on lock
 int lock_get_max_waiter_priority(struct lock *lock) {
     return list_empty(&(lock->semaphore.waiters)) ? PRI_MIN : 
-      ELEM_TO_THREAD(list_back(&(lock->semaphore.waiters)))->eff_priority;
+      ELEM_TO_THREAD(list_max(&(lock->semaphore.waiters), 
+                                            &thread_less, NULL))->eff_priority;
 }
 
 /* One semaphore in a list. */
