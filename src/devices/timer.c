@@ -209,21 +209,21 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
 
-  // Iterate through the list of sleeping threads
+  /* Iterate through the list of sleeping threads */
   struct list_elem *curr;
   for (curr = list_begin (&alarm_list); curr != list_end (&alarm_list);
         curr = list_next (curr))
     {
       struct alarm *sleeping 
-        = list_entry_to_alarm(curr); // Convert from list_elem
+        = list_entry_to_alarm(curr); /* Convert from list_elem */
       
-      // If the alarm time has NOT passed
+      /* If the alarm time has NOT passed */
       if (ticks < sleeping->alarm_time) { 
-        break; // Stop iterating through list - no more threads to wake up
+        break; /* Stop iterating through list - no more threads to wake up */
       }
 
-      list_remove(&sleeping->elem); // Remove thread from alarm_list
-      sema_up(sleeping->sema); // Wake up thread
+      list_remove(&sleeping->elem); /* Remove thread from alarm_list */
+      sema_up(sleeping->sema); /* Wake up thread */
     }
 
   thread_tick ();
