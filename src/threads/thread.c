@@ -319,7 +319,7 @@ thread_block (void)
   schedule ();
 }
 
-// Removes maximal element from a list and returns it
+/* Removes maximal element from a list and returns it */
 struct list_elem *list_pop_max(struct list *list, list_less_func *less, 
     void *aux) {
   struct list_elem *elem = list_max(list, less, aux);
@@ -490,7 +490,8 @@ thread_get_priority (void)
   return thread_current ()->eff_priority;
 }
 
-// priority = PRI_MAX - (recent_cpu / 4) - (nice * 2),
+/* Recalculates the priority based on the formula:
+priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
 void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
   fp_t recent_scaled = DIV_FP_BY_INT(thread->recent_cpu, 4);
   int nice_scaled = thread->nice * 2;
