@@ -211,6 +211,7 @@ recalculate_scheduler_values (void)
     qsort(currents, TIME_SLICE, sizeof(struct thread *), is_thread_greater);
     /* Current[0] will always need to be updated */
     recalculate_thread_priority(currents[0], NULL);
+    
     /* Updates the rest of threads that have run */
     for (int i = 0;  i < TIME_SLICE; i++) {
       /* Checks whether we have already updated the thread*/
@@ -469,11 +470,17 @@ thread_set_priority (int new_priority)
 /* Sets the effective priority of a particular thread to either its base
 priority or the highest priority of its held locks (donated priority) */
 void thread_set_eff_priority(struct thread *thread) {
-  thread->eff_priority 
-    = MAX(thread->base_priority, (list_empty(&(thread->held_locks)) ? 
-      PRI_MIN : 
-      ELEM_TO_LOCK(list_max(&(thread->held_locks), 
-                                      &lock_less, NULL))->eff_priority));
+  int temp_eff_priority;
+  struct list *held_locks = &(thread->held_locks);
+
+  if (list_empty(held_locks)) {
+    temp_eff_priority = PRI_MIN;
+  } else {
+    struct lock *lock = ELEM_TO_LOCK(list_max(held_locks, &lock_less, NULL));
+    temp_eff_priority = lock->eff_priority;      
+  }
+
+  thread->eff_priority = MAX(thread->base_priority, temp_eff_priority);
 }
 
 /* Returns the current thread's priority. */
@@ -485,27 +492,19 @@ thread_get_priority (void)
 
 // priority = PRI_MAX - (recent_cpu / 4) - (nice * 2),
 void recalculate_thread_priority(struct thread *thread, void *aux UNUSED) {
-  int priority = 
-      FP_TO_INT_ROUND_ZERO(
-        MULT_FP_BY_INT(
-          SUB_FP_AND_INT(
-            DIV_FP_BY_INT(thread->recent_cpu, 4), 
-            PRI_MAX - (thread->nice * 2)
-          ),
-          -1
-        )
-      );
+  fp_t recent_scaled = DIV_FP_BY_INT(thread->recent_cpu, 4);
+  int nice_scaled = thread->nice * 2;
+  fp_t temp_priority = 
+    MULT_FP_BY_INT(SUB_FP_AND_INT(recent_scaled, PRI_MAX - nice_scaled), -1);
 
-  thread->base_priority = CLAMP_PRI(priority); 
+  thread->base_priority = CLAMP_PRI(FP_TO_INT_ROUND_ZERO(temp_priority)); 
 }
 
 /* Sets the current thread's nice value to NICE. */
-
-// May need to disable interrupts
 void
 thread_set_nice (int nice) 
 {
-  // Check that a valid niceness value has been passed in
+  /* Check that a valid niceness value has been passed in */
   ASSERT(thread_mlfqs);
   ASSERT(nice >= NICE_MIN && nice <= NICE_MAX);
   
@@ -524,7 +523,7 @@ thread_get_nice (void)
 
 /* Calculates new value of load_avg according to the formula: 
    (59/60)*load_avg + (1/60)*ready_threads
-   where (59/60) is load_avg_coeff and (1/60) is ready_threads_coeff*/
+   where (59/60) is load_avg_coeff and (1/60) is ready_threads_coeff */
 void
 recalculate_thread_load_avg(void) {
   fp_t load_avg_coeff = DIV_FP_BY_INT(INT_TO_FP(59), 60);
@@ -555,17 +554,15 @@ thread_get_recent_cpu (void)
   return FP_TO_NEAREST_INT(MULT_FP_BY_INT(thread_current()->recent_cpu, 100));
 }
 
-// Updates the recent_cpu value of the specific thread
-// recent_cpu = (2*load_avg )/(2*load_avg + 1) * recent_cpu + nice
+/* Updates the recent_cpu value of the specific thread
+recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice */
 void update_recent_cpu(struct thread *thread, void *aux UNUSED) {
   fp_t avg_doubled = MULT_FP_BY_INT(load_avg, 2); 
+  fp_t recent_coeff = DIV_FPS(avg_doubled, ADD_FP_AND_INT(avg_doubled, 1));
+  
   thread->recent_cpu = 
-    ADD_FP_AND_INT( 
-      MULT_FPS(
-        DIV_FPS(avg_doubled, ADD_FP_AND_INT(avg_doubled, 1)), 
-        thread->recent_cpu),
-      thread->nice
-    );
+    ADD_FP_AND_INT(MULT_FPS(recent_coeff, thread->recent_cpu), thread->nice);
+
   recalculate_thread_priority(thread, NULL);
 }
 
