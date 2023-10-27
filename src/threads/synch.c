@@ -74,7 +74,7 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   
   while (sema->value == 0) {
-    // Insert current thread into waiters in correct priority position 
+    // Insert current thread into waiters
     list_push_back (&sema->waiters, &thread_current ()->elem);
     thread_block ();
   }
@@ -123,7 +123,8 @@ sema_up (struct semaphore *sema)
   bool should_yield = false;
   if (!list_empty (&sema->waiters)) {
     // Unblock the semaphore's highest priority waiting thread
-    struct thread *next_to_run = ELEM_TO_THREAD(list_pop_max (&sema->waiters, &thread_less, NULL));
+    struct thread *next_to_run 
+           = ELEM_TO_THREAD(list_pop_max (&sema->waiters, &thread_less, NULL));
     thread_unblock (next_to_run);
     should_yield = thread_current()->eff_priority < next_to_run->eff_priority;
   } 
@@ -329,12 +330,14 @@ struct semaphore_elem
    has a higher priority waiter */
 static bool sema_elem_less(const struct list_elem *a, 
     const struct list_elem *b, void *aux UNUSED) {
-  struct semaphore *sema_a = &list_entry(a, struct semaphore_elem, elem)->semaphore; 
-  struct semaphore *sema_b = &list_entry(b, struct semaphore_elem, elem)->semaphore; 
+  struct semaphore *sema_a 
+                      = &list_entry(a, struct semaphore_elem, elem)->semaphore; 
+  struct semaphore *sema_b 
+                      = &list_entry(b, struct semaphore_elem, elem)->semaphore; 
 
   return thread_less(
-    list_back (&sema_a->waiters),
-    list_back (&sema_b->waiters), NULL);
+    list_max (&sema_a->waiters, &thread_less, NULL),
+    list_max (&sema_b->waiters, &thread_less, NULL), NULL);
 }
 
 /* Initializes condition variable COND.  A condition variable
