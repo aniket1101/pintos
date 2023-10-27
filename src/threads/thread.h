@@ -31,9 +31,9 @@ typedef int tid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 
 /* Thread Niceness Values*/
-#define NICE_MIN -20
-#define NICE_DEFAULT 0
-#define NICE_MAX 20
+#define NICE_MIN -20                    /* Lowest Niceness */
+#define NICE_DEFAULT 0                  /* Default Niceness */
+#define NICE_MAX 20                     /* Highest Niceness */
 
 /* A kernel thread or user process.
 
@@ -155,11 +155,6 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
-void recalculate_thread_priority(struct thread *thread, void *aux UNUSED);
-void recalculate_thread_load_avg (void);
-void update_recent_cpu(struct thread *thread, void *aux UNUSED);
-void recalculate_scheduler_values (void);
 
 bool thread_less(const struct list_elem *a, const struct list_elem *b, 
     void *aux UNUSED); 

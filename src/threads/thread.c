@@ -66,7 +66,10 @@ static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 bool thread_mlfqs;
 
 static fp_t load_avg;           /* load_avg global fixed point variable */
-static struct thread *currents[4]; //stores threads that have run in this slice
+
+/* Stores threads that have run during the current time slice, so that priority
+updates aren't lost for threads that don't run for the entire slice */
+static struct thread *currents[4]; 
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -80,8 +83,11 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
-
-static int isEqual(const void *t1, const void *t2);
+static void recalculate_thread_priority(struct thread *, void * UNUSED);
+static void recalculate_thread_load_avg (void);
+static void update_recent_cpu(struct thread *, void * UNUSED);
+static void recalculate_scheduler_values (void);
+static int is_thread_greater(const void *, const void *);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -108,11 +114,14 @@ thread_init (void)
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
   init_thread (initial_thread, "main", PRI_DEFAULT);
-  initial_thread->nice = 0;
+  /* Initialise nice value to 0 for starting thread*/
+  initial_thread->nice = NICE_DEFAULT;  
+  /* Initialise recent_cpu value to 0 for starting thread*/
   initial_thread->recent_cpu = 0;
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
-  load_avg = 0; // Initialise load_avg to 0 at the start of the program
+  /* Initialise load_avg to 0 at the start of the program */
+  load_avg = 0; 
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -156,7 +165,7 @@ thread_tick (void)
     kernel_ticks++;
 
   if (thread_mlfqs) {
-    // Recalculate all the priority, recent_cpu and load_avg as necessary.
+    /* Recalculate all the priority, recent_cpu and load_avg as necessary. */
     recalculate_scheduler_values(); 
   }
 
@@ -165,10 +174,10 @@ thread_tick (void)
     intr_yield_on_return ();
 }
 
-int isEqual(const void *t1, const void *t2) {
-  if (is_thread(t1 && is_thread(t2))) return t1 == t2; 
-  else return -1;
-  }
+/* Compares threads by their memory*/
+int is_thread_greater(const void *t1, const void *t2) {
+  return t1 > t2;  
+}
 
 /* Recalculates the priority, recent_cpu and load_avg at each timer 
    interrupt. */
@@ -178,25 +187,33 @@ recalculate_scheduler_values (void)
   struct thread *current = thread_current();
 
   /* Each time a timer interrupt occurs, recent cpu is incremented by 1 for 
-     the running thread only, unless the idle thread is running.*/
+     the running thread only, unless the idle thread is running. Also, the
+     thread that is running for the tick is added to the currents list */
   if (current != idle_thread) {
     current->recent_cpu = ADD_FP_AND_INT(current->recent_cpu, 1);
     currents[timer_ticks() % TIME_SLICE] = current;
   } 
 
   /* Recalculate recent_cpu and load _avg when when the system tick counter  
-     reaches a multiple of a second */ 
+     reaches a multiple of a second. Also updates the priority of all threads, 
+     which is called inside update_recent_cpu to only iterate through all
+     threads once */ 
   if (timer_ticks() % TIMER_FREQ == 0) {
     recalculate_thread_load_avg();
     thread_foreach(&update_recent_cpu, NULL);
 
-    /* Recalculate priority for all threads on every fourth clock tick, noting
-    that the priority for a thread only changes when its recent_cpu changes*/
+    /* Recalculate priority for all threads that have run this time slice on 
+    every fourth clock tick, noting that the priority for a thread only changes 
+    when its recent_cpu changes, which is every second for threads that have not 
+    run, so they don't need to have their priority updated every slice */
   } else if (timer_ticks() % TIME_SLICE == 0) {
-     
-    qsort(currents, TIME_SLICE, sizeof(struct thread *), isEqual);
+    /* Sorts currents to group timer ticks where the same thread has run */ 
+    qsort(currents, TIME_SLICE, sizeof(struct thread *), is_thread_greater);
+    /* Current[0] will always need to be updated */
     recalculate_thread_priority(currents[0], NULL);
+    /* Updates the rest of threads that have run */
     for (int i = 0;  i < TIME_SLICE; i++) {
+      /* Checks whether we have already updated the thread*/
       if (currents[i] != currents[i - 1]) {
         recalculate_thread_priority(currents[i], NULL);
       }
@@ -246,17 +263,15 @@ thread_create (const char *name, int priority,
   if (t == NULL)
     return TID_ERROR;
 
-  /* Initialize thread. */
+  /* Initialize thread values for advanced scheduler */
   if (thread_mlfqs) {
     t->nice = thread_current()->nice;
     t->recent_cpu = thread_current()->recent_cpu;
     recalculate_thread_priority(t, NULL);
-    init_thread (t, name, t->base_priority);
-    tid = t->tid = allocate_tid ();      
-  } else {
-    init_thread (t, name, priority);
-    tid = t->tid = allocate_tid ();
-  }
+    priority = t->base_priority; 
+  } 
+  init_thread (t, name, priority);
+  tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
@@ -451,6 +466,8 @@ thread_set_priority (int new_priority)
   }  
 }
 
+/* Sets the effective priority of a particular thread to either its base
+priority or the highest priority of its held locks (donated priority) */
 void thread_set_eff_priority(struct thread *thread) {
   thread->eff_priority 
     = MAX(thread->base_priority, (list_empty(&(thread->held_locks)) ? 

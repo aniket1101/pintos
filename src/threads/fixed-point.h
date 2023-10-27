@@ -3,12 +3,12 @@
 
 #include <stdint.h>
 
-typedef int32_t fp_t;
+typedef int32_t fp_t; /* Fixed point numbers are expressed as int32_t */
 
-#define FP_Q 14
-#define FP_P 17
+#define FP_Q 14       /* Bits to the left of the fixed point */
+#define FP_P 17       /* Bits to the right of the fixed point */
 
-#define FP_F (1 << FP_Q)
+#define FP_F (1 << FP_Q) /* Constant to transform from int to fp_t */
 
 // REMEMBER: FP IS A BIG INTEGER, NOT A C FLOAT
 
@@ -19,7 +19,7 @@ typedef int32_t fp_t;
 #define FP_TO_INT_ROUND_ZERO(X) ((X) / FP_F) 
 
 // Takes in FP and returns int
-#define FP_TO_NEAREST_INT(X) (((X) >= 0) ? ((X + (FP_F / 2)) / FP_F) : \
+#define FP_TO_NEAREST_INT(X) (((X) >= 0) ? (((X) + (FP_F / 2)) / FP_F) : \
                                    (((X) - (FP_F / 2)) / FP_F)) 
 
 // Takes in 2 FP and returns FP
