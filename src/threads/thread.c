@@ -177,8 +177,8 @@ recalculate_scheduler_values (void)
 {
   struct thread *current = thread_current();
 
-  /* Each time a timer interrupt occurs, recent cpu is incremented by 1 for the
-    running thread only, unless the idle thread is running.*/
+  /* Each time a timer interrupt occurs, recent cpu is incremented by 1 for 
+     the running thread only, unless the idle thread is running.*/
   if (current != idle_thread) {
     current->recent_cpu = ADD_FP_AND_INT(current->recent_cpu, 1);
     currents[timer_ticks() % TIME_SLICE] = current;
@@ -304,7 +304,8 @@ thread_block (void)
 }
 
 // Removes maximal element from a list and returns it
-struct list_elem *list_pop_max(struct list *list, list_less_func *less, void *aux) {
+struct list_elem *list_pop_max(struct list *list, list_less_func *less, 
+    void *aux) {
   struct list_elem *elem = list_max(list, less, aux);
   list_remove(elem);
   return elem;
@@ -441,7 +442,8 @@ thread_set_priority (int new_priority)
 {
   // If we're using advanced scheduler, ignore calls to thread_set_priority
   if (!thread_mlfqs) {
-    thread_current ()->base_priority = CLAMP_PRI(new_priority); // Set thread's priority 
+     // Set thread's priority 
+    thread_current ()->base_priority = CLAMP_PRI(new_priority);
     thread_set_eff_priority(thread_current());
     if (!intr_context()) { // If not running from an interrupt...
       thread_yield(); // ...yield to next thread
@@ -453,7 +455,8 @@ void thread_set_eff_priority(struct thread *thread) {
   thread->eff_priority 
     = MAX(thread->base_priority, (list_empty(&(thread->held_locks)) ? 
       PRI_MIN : 
-      ELEM_TO_LOCK(list_max(&(thread->held_locks), &lock_less, NULL))->eff_priority));
+      ELEM_TO_LOCK(list_max(&(thread->held_locks), 
+                                      &lock_less, NULL))->eff_priority));
 }
 
 /* Returns the current thread's priority. */
