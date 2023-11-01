@@ -21,12 +21,18 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+struct arg {
+  char *v[64];
+  int c;
+};
+static void push_args(void (**esp), struct arg *arg);
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *cmd) 
 {
   char *fn_copy;
   tid_t tid;
@@ -36,21 +42,32 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy, cmd, PGSIZE);
+
+  char *token, *save_ptr;
+  struct arg arg = { .c = 0 };
+
+  for (token = strtok_r (fn_copy, " ", &save_ptr);
+      token != NULL;
+      token = strtok_r (NULL, " ", &save_ptr)) {
+    arg.v[(arg.c)++] = token;
+  }
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (arg.v[0], PRI_DEFAULT, start_process, &arg);
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
   return tid;
 }
+
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *args_)
 {
-  char *file_name = file_name_;
+  struct arg *arg = args_;
+
   struct intr_frame if_;
   bool success;
 
@@ -59,10 +76,12 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (arg->v[0], &if_.eip, &if_.esp);
+
+  push_args(&if_.esp, arg);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  palloc_free_page (arg->v[0]);
   if (!success) 
     thread_exit ();
 
@@ -74,6 +93,48 @@ start_process (void *file_name_)
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
+}
+
+#define PUSH_STACK(val) (PUSH_STACK_WITH_SIZE(val, sizeof(val)))
+#define PUSH_STACK_WITH_SIZE(val, size) ({*esp = (void *) (val); \
+                                          *esp += (size);})
+
+/* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
+void push_args(void (**esp), struct arg *arg) {
+  
+  /* Push arguments on the stack */
+  for (int i = arg->c - 1; i > 0; i--) {
+    // *esp = arg->v[i];
+    // *esp += sizeof(arg->v[i]);
+    PUSH_STACK(arg->v[i]);
+  }
+
+  /* Push a null pointer sentinel on the stack */
+  // *esp = NULL;
+  // *esp += sizeof(void *);
+  PUSH_STACK(NULL);
+
+  /* Push pointers to arguments on the stack */
+  for (int i = arg->c - 1; i > 0; i--) {
+    // *esp = &arg->v[i];
+    // *esp += sizeof(void *);
+    PUSH_STACK(&(arg->v[i]));
+  }
+
+  /* Push first pointer on the stack */
+  // *esp = *esp - sizeof(void *);
+  // *esp += sizeof(void *);
+  PUSH_STACK(&(arg->v[0]));
+
+  /* Push the number of arguments on the stack */
+  // *esp = (void *) arg->c;
+  // *esp += sizeof(int);
+  PUSH_STACK(arg->c);
+
+  /* Push a fake return address on the stack */
+  PUSH_STACK(NULL);
+  // *esp = NULL;
+  // *esp += sizeof(void *);
 }
 
 /* Waits for thread TID to die and returns its exit status. 
@@ -451,7 +512,7 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;
+        *esp = PHYS_BASE - 12;
       else
         palloc_free_page (kpage);
     }
