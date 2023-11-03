@@ -435,16 +435,16 @@ thread_yield (void)
 /* Yield if not in an interrupt context and 
    if current thread should be preempted */
 void try_yield(void) {
-  if (intr_context()) {
-    return; // Cannot yield if in an interrupt context
-  }
-
   DISABLE_INTR(
     struct list_elem *next = list_max(&ready_list, &thread_less, NULL);
     
     // If highest priority ready thread has higher priority than current
-    if (thread_less(&thread_current()->elem, next, &thread_less)) { 
-      thread_yield(); // Preempt
+    if (thread_less(&thread_current()->elem, next, &thread_less)) {
+      if (intr_context()) {
+        intr_yield_on_return();
+      } else {
+        thread_yield(); // Preempt
+      }
     }
   );
 }
