@@ -8,6 +8,9 @@
 #include "devices/timer.h"
 #include "userprog/pagedir.h"
 #include "threads/vaddr.h"
+#include <string.h>
+
+#define MAX_SIZE 100
 
 static void syscall_handler (struct intr_frame *);
 static int get_num_args(int syscall_num);
@@ -71,8 +74,9 @@ int wait(pid_t pid) {
 void exit(int status) {
   struct thread *thread = thread_current();
   thread->exit_code = status;
-  char buf[] = "Status is ";
-  putbuf(buf, 10);
+  char buf[MAX_SIZE];
+  snprintf(buf, MAX_SIZE, "%s: exit(%d)", thread->name, thread->exit_code);
+  write(1, buf, MAX_SIZE);
   thread_exit();
 }
 
