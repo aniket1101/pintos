@@ -25,7 +25,7 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  int syscall_num = (int) f->esp;
+  int syscall_num = *((int *) (f->esp));
   f->esp -= sizeof(int);
   
   int num_args = get_num_args(syscall_num);
@@ -37,13 +37,19 @@ syscall_handler (struct intr_frame *f)
 
   switch (syscall_num) {
     case SYS_EXIT:
-      exit((int) args[0]);
+      int status = *((int *) args[0]);
+      exit(status);
       break;
     case SYS_WAIT:
-      f->eax = wait((pid_t) args[0]);
+      pid_t pid = *((pid_t *) args[0]);
+      f->eax = wait(pid);
       break;
     case SYS_WRITE:
-      f->eax = write((int) args[0], (const void *) args[1], (unsigned) args[2]);
+      int fd = *((int*) args[0]);
+      void *buff = *((void **) args[1]);
+      check_pointer(buff);
+      unsigned size = *((unsigned *) args[2]);
+      f->eax = write(fd, buff, size);
       break;
   }
 }
@@ -81,8 +87,10 @@ void exit(int status) {
 }
 
 int write(int fd, const void *buffer, unsigned size) {
-  if (fd == 1) {
+  if (fd == STDOUT_FILENO) {
     putbuf(buffer, size);
+  } else {
+    
   }
   return size;
 }
