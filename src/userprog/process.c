@@ -51,7 +51,7 @@ process_execute (const char *cmd)
   for (token = strtok_r (fn_copy, " ", &save_ptr);
       token != NULL;
       token = strtok_r (NULL, " ", &save_ptr)) {
-    arg.v[(arg.c)++] = token;
+    arg.v[arg.c++] = token;
   }
 
   /* Create a new thread to execute FILE_NAME. */
@@ -98,7 +98,7 @@ start_process (void *args_)
 
 #define PUSH_STACK(val) (PUSH_STACK_WITH_SIZE(val, sizeof(val)))
 #define PUSH_STACK_WITH_SIZE(val, size) ({*esp = (void *) (val); \
-                                          *esp += (size);})
+                                          *esp -= (size % 4);})
 
 /* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
 void push_args(void (**esp), struct arg *arg) {
@@ -125,7 +125,7 @@ void push_args(void (**esp), struct arg *arg) {
   /* Push first pointer on the stack */
   // *esp = *esp - sizeof(void *);
   // *esp += sizeof(void *);
-  PUSH_STACK(&(arg->v[0]));
+  PUSH_STACK(&arg->v);
 
   /* Push the number of arguments on the stack */
   // *esp = (void *) arg->c;
@@ -133,7 +133,7 @@ void push_args(void (**esp), struct arg *arg) {
   PUSH_STACK(arg->c);
 
   /* Push a fake return address on the stack */
-  PUSH_STACK(NULL);
+  PUSH_STACK(0);
   // *esp = NULL;
   // *esp += sizeof(void *);
 }
