@@ -80,9 +80,12 @@ int wait(pid_t pid) {
 void exit(int status) {
   struct thread *thread = thread_current();
   thread->exit_code = status;
+  
   char buf[MAX_SIZE];
-  snprintf(buf, MAX_SIZE, "%s: exit(%d)", thread->name, thread->exit_code);
-  write(1, buf, MAX_SIZE);
+  int cnt;
+  
+  cnt = snprintf(buf, MAX_SIZE, "%s: exit(%d)", thread->name, thread->exit_code);
+  write(1, buf, cnt);
   thread_exit();
 }
 
