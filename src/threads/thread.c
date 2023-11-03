@@ -298,7 +298,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-  thread_yield(); // Yield in case unblocked thread is higher priority
+  try_yield();  
   
   return tid;
 }
@@ -420,19 +420,33 @@ void
 thread_yield (void) 
 {
   struct thread *cur = thread_current ();
-  enum intr_level old_level;
-  
   ASSERT (!intr_context ());
 
-  old_level = intr_disable ();
-  
-  if (cur != idle_thread) { 
-    list_push_back(&ready_list, &(cur->elem));
+  DISABLE_INTR(
+    if (cur != idle_thread) { 
+      list_push_back(&ready_list, &cur->elem);
+    }
+
+    cur->status = THREAD_READY;
+    schedule ();
+  );
+}
+
+/* Yield if not in an interrupt context and 
+   if current thread should be preempted */
+void try_yield(void) {
+  if (intr_context()) {
+    return; // Cannot yield if in an interrupt context
   }
 
-  cur->status = THREAD_READY;
-  schedule ();
-  intr_set_level (old_level);
+  DISABLE_INTR(
+    struct list_elem *next = list_max(&ready_list, &thread_less, NULL);
+    
+    // If highest priority ready thread has higher priority than current
+    if (thread_less(&thread_current()->elem, next, &thread_less)) { 
+      thread_yield(); // Preempt
+    }
+  );
 }
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
@@ -457,30 +471,32 @@ void
 thread_set_priority (int new_priority) 
 {
   // If we're using advanced scheduler, ignore calls to thread_set_priority
-  if (!thread_mlfqs) {
-     // Set thread's priority 
+  if (thread_mlfqs) { return; }
+
+  DISABLE_INTR(
+    // Set thread's priority 
     thread_current ()->base_priority = CLAMP_PRI(new_priority);
     thread_set_eff_priority(thread_current());
-    if (!intr_context()) { // If not running from an interrupt...
-      thread_yield(); // ...yield to next thread
-    }
-  }  
+    try_yield();
+  );
 }
 
 /* Sets the effective priority of a particular thread to either its base
 priority or the highest priority of its held locks (donated priority) */
 void thread_set_eff_priority(struct thread *thread) {
-  int temp_eff_priority;
-  struct list *held_locks = &(thread->held_locks);
+  DISABLE_INTR(
+    int temp_eff_priority;
+    struct list *held_locks = &(thread->held_locks);
 
-  if (list_empty(held_locks)) {
-    temp_eff_priority = PRI_MIN;
-  } else {
-    struct lock *lock = ELEM_TO_LOCK(list_max(held_locks, &lock_less, NULL));
-    temp_eff_priority = lock->eff_priority;      
-  }
+    if (list_empty(held_locks)) {
+      temp_eff_priority = PRI_MIN;
+    } else {
+      struct lock *lock = ELEM_TO_LOCK(list_max(held_locks, &lock_less, NULL));
+      temp_eff_priority = lock->eff_priority;      
+    }
 
-  thread->eff_priority = MAX(thread->base_priority, temp_eff_priority);
+    thread->eff_priority = MAX(thread->base_priority, temp_eff_priority);
+  );
 }
 
 /* Returns the current thread's priority. */
@@ -512,7 +528,7 @@ thread_set_nice (int nice)
   thread_current()->nice = nice; // Set the thread's niceness
   recalculate_thread_priority(thread_current (), NULL); // Recalculate priority
   
-  thread_yield();
+  try_yield();
 }
 
 /* Returns the current thread's nice value. */

@@ -25,6 +25,7 @@ struct arg {
   char *v[64];
   int c;
 };
+
 static void push_args(void (**esp), struct arg *arg);
 
 /* Starts a new thread running a user program loaded from
@@ -165,7 +166,7 @@ process_exit (void)
   if (pd != NULL) 
     {
       /* Correct ordering here is crucial.  We must set
-         cur->pagedir to NULL before switching page directories,
+         cur->pagedir to NULL before switching page directories,'
          so that a timer interrupt can't switch back to the
          process page directory.  We must activate the base page
          directory before destroying the process's page

@@ -7,6 +7,14 @@
 // Converts list_elem to lock
 #define ELEM_TO_LOCK(lck) (list_entry(lck, struct lock, elem))
 
+/* Disable interrupts, execute some code, 
+   then restore interrupt level */
+#define DISABLE_INTR(code) ({\
+  enum intr_level old_level = intr_disable ();\
+  code\
+  intr_set_level (old_level);\
+})
+
 /* A counting semaphore. */
 struct semaphore 
   {
@@ -27,8 +35,8 @@ struct lock
     struct lock *holder_waiting_on; /* Lock the holder waits on. */
     struct semaphore semaphore;     /* Binary semaphore controlling access. */
     struct list_elem elem;          /* Allows list of locks. */
-    int eff_priority;        /* Holds highest priority of all waiting threads
-                                                           and lock holder. */
+    int eff_priority;               /* Holds highest priority of all waiting
+                                       threads and lock holder. */
   };
 
 void lock_init (struct lock *);
@@ -36,8 +44,8 @@ void lock_acquire (struct lock *);
 bool lock_try_acquire (struct lock *);
 void lock_release (struct lock *);
 bool lock_held_by_current_thread (const struct lock *);
-bool lock_less(const struct list_elem *, 
-    const struct list_elem *, void *aux );
+bool lock_less(const struct list_elem *, const struct list_elem *, 
+  void *aux );
 
 /* Condition variable. */
 struct condition 
