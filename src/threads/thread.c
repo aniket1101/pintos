@@ -327,14 +327,16 @@ struct list_elem *list_pop_max(struct list *list, list_less_func *less,
   return elem;
 }
 
+int choose_correct_priority(struct thread *thread) {
+  return (thread_mlfqs) ? 
+    thread->base_priority : thread->eff_priority;
+}
+
 /* Compares a threads effective priority from its locks. */
 bool thread_less(const struct list_elem *a, 
     const struct list_elem *b, void *aux UNUSED) {
-  struct thread *thread_a = ELEM_TO_THREAD(a);
-  struct thread *thread_b = ELEM_TO_THREAD(b);
-  return (thread_mlfqs) ? 
-    thread_a->base_priority < thread_b->base_priority :
-    thread_a->eff_priority < thread_b->eff_priority;
+  return choose_correct_priority(ELEM_TO_THREAD(a)) 
+    < choose_correct_priority(ELEM_TO_THREAD(b));
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -436,14 +438,17 @@ thread_yield (void)
    if current thread should be preempted */
 void try_yield(void) {
   DISABLE_INTR(
-    struct list_elem *next = list_max(&ready_list, &thread_less, NULL);
+    struct thread *next_thread 
+      = ELEM_TO_THREAD(list_max(&ready_list, &thread_less, NULL));
     
-    // If highest priority ready thread has higher priority than current
-    if (thread_less(&thread_current()->elem, next, &thread_less)) {
+    // If next thread's priority >= current priority
+    if (choose_correct_priority(thread_current()) 
+        <= choose_correct_priority(next_thread)) {
+      // Preempt
       if (intr_context()) {
         intr_yield_on_return();
       } else {
-        thread_yield(); // Preempt
+        thread_yield(); 
       }
     }
   );
