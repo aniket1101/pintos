@@ -51,6 +51,8 @@ int wait(pid_t pid) {
   return -1;
 }
 void exit(int status) {
+  struct thread *thread = thread_current();
+  thread->exit_code = status;
   char buf[] = "Status is ";
   putbuf(buf, 10);
   thread_exit();
