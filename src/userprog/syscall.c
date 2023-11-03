@@ -6,9 +6,12 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include "devices/timer.h"
+#include "userprog/pagedir.h"
+#include "threads/vaddr.h"
 
 static void syscall_handler (struct intr_frame *);
 static int get_num_args(int syscall_num);
+static void check_pointer(void *ptr);
 
 void
 syscall_init (void) 
@@ -39,6 +42,21 @@ syscall_handler (struct intr_frame *f)
     case SYS_WRITE:
       f->eax = write((int) args[0], (const void *) args[1], (unsigned) args[2]);
       break;
+  }
+}
+
+void check_pointer(void *ptr) {
+  struct thread *thread = thread_current();
+  bool valid = true;
+  if (ptr == NULL) {
+    valid = false;
+  } else if (is_kernel_vaddr(ptr)) {
+    valid = false;
+  } else if (pagedir_get_page(thread->pagedir, ptr)) {
+    valid = false;
+  }
+  if (!valid) {
+    thread_exit();
   }
 }
 
