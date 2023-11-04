@@ -327,7 +327,7 @@ struct list_elem *list_pop_max(struct list *list, list_less_func *less,
   return elem;
 }
 
-int choose_correct_priority(struct thread *thread) {
+static int choose_correct_priority(struct thread *thread) {
   return (thread_mlfqs) ? 
     thread->base_priority : thread->eff_priority;
 }
