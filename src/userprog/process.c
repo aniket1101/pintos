@@ -148,9 +148,9 @@ void push_args(void (**esp), struct arg *arg) {
  * This function will be implemented in task 2.
  * For now, it does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  return -1;
+  return wait((pid_t) child_tid);
 }
 
 /* Free the current process's resources. */
