@@ -69,14 +69,15 @@ void check_pointer(void *ptr) {
   }
 }
 
-int wait(pid_t pid) {
+int wait(pid_t pid UNUSED) {
   // while (true) {
   //   barrier();
   // }
 
-  timer_sleep(500);
+  timer_sleep(600);
   return -1;
 }
+
 void exit(int status) {
   struct thread *thread = thread_current();
   thread->exit_code = status;
