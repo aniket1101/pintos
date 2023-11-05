@@ -17,6 +17,29 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "lib/user/syscall.h"
+
+#define WORD_SIZE 4
+
+// #define __DEBUG__
+// #define __HEX_DUMP__
+
+#ifdef __DEBUG__ 
+  #define PUTBUF_FORMAT(format, ...) ({\
+      char out[100];\
+      putbuf(out, snprintf(out, 100, format "\n", __VA_ARGS__));\
+    })
+  #define PUTBUF(str) (PUTBUF_FORMAT(str "%s", ""))
+#else
+  #define PUTBUF_FORMAT(format, ...)
+  #define PUTBUF(str) 
+#endif
+
+#ifdef __HEX_DUMP__ 
+  #define HEX_DUMP_ESP(esp) (hex_dump((uint32_t) esp, esp, PHYS_BASE - esp, 1))
+#else 
+  #define HEX_DUMP_ESP(esp)
+#endif
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -26,14 +49,14 @@ struct arg {
   int c;
 };
 
-static void push_args(void (**esp), struct arg *arg);
+static void push_args(struct intr_frame *if_, const struct arg *arg);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *cmd) 
+process_execute (const char *file_name) 
 {
   char *fn_copy;
   tid_t tid;
@@ -43,21 +66,29 @@ process_execute (const char *cmd)
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, cmd, PGSIZE);
+  strlcpy (fn_copy, file_name, PGSIZE);
 
   char *token, *save_ptr;
   struct arg arg = { .c = 0 };
 
+  PUTBUF("Tokenize args:");
   for (token = strtok_r (fn_copy, " ", &save_ptr);
       token != NULL;
       token = strtok_r (NULL, " ", &save_ptr)) {
     arg.v[arg.c++] = token;
+    PUTBUF_FORMAT("\targ[%d] = %s", arg.c - 1, arg.v[arg.c - 1]);
   }
 
+  struct arg *arg_copy;
+  arg_copy = palloc_get_page(0);
+  memcpy(arg_copy, &arg, sizeof(struct arg));
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (arg.v[0], PRI_DEFAULT, start_process, &arg);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy);
+  tid = thread_create (arg.v[0], PRI_DEFAULT, start_process, arg_copy);
+  if (tid == TID_ERROR) {
+    palloc_free_page (fn_copy); 
+    palloc_free_page (arg_copy); 
+  }
   return tid;
 }
 
@@ -65,12 +96,13 @@ process_execute (const char *cmd)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *args_)
+start_process (void *file_name_)
 {
-  struct arg *arg = args_;
-
+  struct arg *arg = file_name_;
   struct intr_frame if_;
   bool success;
+
+  PUTBUF("Starting process");
 
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
@@ -79,63 +111,98 @@ start_process (void *args_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (arg->v[0], &if_.eip, &if_.esp);
 
-  push_args(&if_.esp, arg);
-
   /* If load failed, quit. */
-  palloc_free_page (arg->v[0]);
-  if (!success) 
+  if (!success) {
+    PUTBUF("Load failed");
     thread_exit ();
+  } 
 
+  push_args(&if_, arg);
+  
+  palloc_free_page (arg);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  PUTBUF("Start by simulating interrupt return:");
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
 
-#define PUSH_STACK(val) (PUSH_STACK_WITH_SIZE(val, sizeof(val)))
-#define PUSH_STACK_WITH_SIZE(val, size) ({*esp = (void *) (val); \
-                                          *esp -= (size % 4);})
-
 /* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
-void push_args(void (**esp), struct arg *arg) {
+void push_args(struct intr_frame *if_, const struct arg *arg) {
+  PUTBUF("Push args onto stack:");
+  PUTBUF_FORMAT("\tesp at PHYS_BASE = %p", if_->esp);
   
+  void *arg_ptrs[arg->c];
+
   /* Push arguments on the stack */
-  for (int i = arg->c - 1; i > 0; i--) {
-    // *esp = arg->v[i];
-    // *esp += sizeof(arg->v[i]);
-    PUSH_STACK(arg->v[i]);
+  for (int i = arg->c - 1; i >= 0; i--) {
+    int size;
+    size = strlen(arg->v[i]) + 1;
+
+    if_->esp -= sizeof(char) * size;
+    arg_ptrs[i] = if_->esp;
+
+    strlcpy(if_->esp, arg->v[i], size);
+    
+    PUTBUF_FORMAT("\tmoved stack down by %d. pushed %s onto stack at %p", 
+      sizeof(char) * size, arg->v[i], if_->esp);
+    HEX_DUMP_ESP(if_->esp);
   }
 
-  /* Push a null pointer sentinel on the stack */
-  // *esp = NULL;
-  // *esp += sizeof(void *);
-  PUSH_STACK(NULL);
+  /* Word align esp */
+  int alignment = ((uint32_t) if_->esp) % WORD_SIZE;
 
+  PUTBUF_FORMAT("\tmoved stack down by %d for word alignment. now at %p",
+    alignment, if_->esp - alignment);
+  
+  if_->esp -= alignment;
+  HEX_DUMP_ESP(if_->esp);
+
+  /* Push a null pointer sentinel on the stack */
+  if_->esp -= sizeof(void *);
+  *((int *) if_->esp) = 0;
+
+  PUTBUF_FORMAT("\tmoved stack down by %d. pushed NULL sentinel onto stack at %p", 
+    sizeof(NULL), if_->esp);
+  HEX_DUMP_ESP(if_->esp);
+ 
   /* Push pointers to arguments on the stack */
-  for (int i = arg->c - 1; i > 0; i--) {
-    // *esp = &arg->v[i];
-    // *esp += sizeof(void *);
-    PUSH_STACK(&(arg->v[i]));
+  for (int i = arg->c - 1; i >= 0; i--) {
+    if_->esp -= sizeof(void *);
+    *((void**) if_->esp) = arg_ptrs[i];
+    
+    PUTBUF_FORMAT("\tmoved stack down by %d. pushed pointer = %p to arg[%d] onto stack at %p", 
+      sizeof(void *), arg_ptrs[i], i, if_->esp);
+    HEX_DUMP_ESP(if_->esp);
   }
 
   /* Push first pointer on the stack */
-  // *esp = *esp - sizeof(void *);
-  // *esp += sizeof(void *);
-  PUSH_STACK(&arg->v);
+  if_->esp -= sizeof(void *);
+  PUTBUF_FORMAT("\tmoved stack down by %d. pushed first pointer = %p onto stack at %p", 
+    sizeof(void*), if_->esp + sizeof(void *), if_->esp);
+
+  *((void**) if_->esp) = if_->esp + sizeof(void *);
+  HEX_DUMP_ESP(if_->esp);
 
   /* Push the number of arguments on the stack */
-  // *esp = (void *) arg->c;
-  // *esp += sizeof(int);
-  PUSH_STACK(arg->c);
+  if_->esp -= sizeof(int);
+  *((int *) if_->esp) = arg->c;
+
+  PUTBUF_FORMAT("\tmoved stack down by %d. pushed argc = %d onto stack at %p", 
+    sizeof(int), arg->c, if_->esp);
+  HEX_DUMP_ESP(if_->esp);
 
   /* Push a fake return address on the stack */
-  PUSH_STACK(0);
-  // *esp = NULL;
-  // *esp += sizeof(void *);
+  if_->esp -= sizeof(void *);
+  *((void **) if_->esp) = NULL;
+
+  PUTBUF_FORMAT("\tmoved stack down by %d. pushed fake return = %p onto stack at %p", sizeof(void *), NULL, if_->esp);
+  HEX_DUMP_ESP(if_->esp);
+  PUTBUF_FORMAT("\tesp at %p", if_->esp);
 }
 
 /* Waits for thread TID to die and returns its exit status. 
