@@ -15,6 +15,8 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "devices/shutdown.h"
+#include "process.h"
+#include "devices/input.h"
 
 #define MAX_SIZE 100
 
@@ -26,7 +28,7 @@ struct open_file * get_open_file(int fd);
 
 struct open_file {
   struct list_elem elem;
-  int file_dir;
+  int file_desc;
   struct file *file;
   // struct list readers;
   bool to_be_removed;
@@ -120,12 +122,15 @@ void exit(int status) {
   thread_exit();
 }
 
-pid_t exec (const char *cmd_line UNUSED) {
-  // TODO
-  // process_execute(cmd_line);
-  // return pid -1;
-  return 0;
+pid_t exec (const char *cmd_line) {
 
+  pid_t pid = ((pid_t) process_execute(cmd_line));
+  // int result = wait(pid);
+  // need to check result
+  if (pid == TID_ERROR) {
+    return pid;
+  }
+  return pid - 1;
 }
 
 int wait(pid_t pid UNUSED) {
@@ -139,7 +144,7 @@ int wait(pid_t pid UNUSED) {
 
 bool create (const char *file, unsigned initial_size) {
   bool success = false;
-  if(!(strlen(file) > 14)) {
+  if(file != NULL && strlen(file) <= 14) {
     success = filesys_create(file, initial_size);
   }
   return success;
@@ -157,43 +162,43 @@ int add_to_open_files(struct file *file) {
   new_file.to_be_removed = false;
   
   if (list_empty(&open_files)) {
-    // List is empty, so new dir will be 2
-    new_file.file_dir = 2;
+    // List is empty, so new desc will be 2
+    new_file.file_desc = 2;
     list_push_front(&open_files, &(new_file.elem));
 
-    return new_file.file_dir;
+    return new_file.file_desc;
   } else {
     // Initialised to 1 in the case that 2 is not being used
-    int pre_file_dir = 1;
+    int pre_file_desc = 1;
     // Initialised outside of the loop in the case it will be put at the end
     struct list_elem *e = list_begin (&open_files); 
     for (; e != list_end (&open_files); e = list_next (e))
     {
       // Finds a gap in ordered list and inserts new element
-      if (list_entry(e, struct open_file, elem)->file_dir - pre_file_dir > 1) {
-        new_file.file_dir = pre_file_dir + 1;
+      if (list_entry(e, struct open_file, elem)->file_desc - pre_file_desc > 1) {
+        new_file.file_desc = pre_file_desc + 1;
         list_insert(&(new_file.elem), e);
 
-        return new_file.file_dir;
+        return new_file.file_desc;
       }
       // Ensures that getting e->prev will not give the head for list_entry
       if (e != list_begin (&open_files)) {
-        pre_file_dir = list_entry(e->prev, struct open_file, elem)->file_dir;
+        pre_file_desc = list_entry(e->prev, struct open_file, elem)->file_desc;
       }
     }
     // e is pointing to the tail of the list
-    new_file.file_dir = list_entry(e->prev, struct open_file, elem)->file_dir + 1;
+    new_file.file_desc = list_entry(e->prev, struct open_file, elem)->file_desc + 1;
   }
   return -1;
 }
 
+// TODO
 int open(const char *file_name) {
   // Get lock to modify open_files
   // lock_acquire(fd_lock);
-  // Fails if no file named NAME exists, bool fail or fail fail?
-  // USES FILESYS
   struct file *file = filesys_open(file_name);
   if (file == NULL) {
+    // lock_release(fd_lock);
     return -1;
   }
   int fd = add_to_open_files(file);
@@ -203,7 +208,19 @@ int open(const char *file_name) {
 }
 
 int filesize(int fd) {
-  return file_length(get_open_file(fd)->file);
+  struct file *file = get_open_file(fd)->file;
+  if (file != NULL) {
+    return file_length(get_open_file(fd)->file);
+  }
+  return 0;
+}
+
+int read(int fd, void *buffer, unsigned size) {
+  if (fd == STDIN_FILENO) {
+    return input_getc();
+  } else {
+    return file_read(get_open_file(fd)->file, buffer, size);
+  }
 }
 
 int write(int fd, const void *buffer, unsigned size) {
@@ -212,21 +229,27 @@ int write(int fd, const void *buffer, unsigned size) {
     putbuf((const char *) buffer, size);
   } else {
     // Write buffer to file, checking how many bytes can be written to
-    // int bytes_to_write = (unsigned) filesize(fd) < 
-    //                           size ? filesize(fd) : (int) size;
-    // return file_write(get_open_file(fd)->file, buffer, bytes_to_write);
+    // return file_write(get_open_file(fd)->file, buffer, size);
   }
   return size;
 }
 
 void seek(int fd, unsigned position) {
   //TODO
-  file_seek(get_open_file(fd)->file, position);
+  struct file *file = get_open_file(fd)->file;
+  // Position is above 0 as it is unsigned, assertion will not fail
+  if (file != NULL) {
+    file_seek(file, position);
+  }
 }
 
 unsigned tell(int fd) {
   // TODO
-  return file_tell(get_open_file(fd)->file);
+  struct file *file = get_open_file(fd)->file;
+  if (file != NULL) {
+    return file_tell(file);
+  }
+  return -1;
 }
 
 struct open_file * get_open_file(int fd) {
@@ -234,7 +257,7 @@ struct open_file * get_open_file(int fd) {
   for (e = list_begin (&open_files);
     e != list_end (&open_files); e = list_next (e)) {
     struct open_file *file = list_entry(e, struct open_file, elem);
-    if (file->file_dir == fd) {
+    if (file->file_desc == fd) {
       return file;
     }
   }
@@ -244,8 +267,10 @@ struct open_file * get_open_file(int fd) {
 void close(int fd) {
   // lock_acquire(fd_lock);
   struct open_file *file = get_open_file(fd);
-  list_remove(&(file->elem));
-  file_close(file->file);
+  if (file != NULL) {
+    list_remove(&(file->elem));
+    file_close(file->file);
+  }
   // lock_release(fd_lock);
 }
 
