@@ -93,14 +93,14 @@ void exit(int status) {
   char buf[MAX_SIZE]; 
   int cnt;
   
-  cnt = snprintf(buf, MAX_SIZE, "%s: exit(%d)", thread->name, thread->exit_code);
+  cnt = snprintf(buf, MAX_SIZE, "%s: exit(%d)\n", thread->name, thread->exit_code);
   write(1, buf, cnt);
   thread_exit();
 }
 
 int write(int fd, const void *buffer, unsigned size) {
   if (fd == STDOUT_FILENO) {
-    putbuf(buffer, size);
+    putbuf((const char *) buffer, size);
   }
   
   return size;
