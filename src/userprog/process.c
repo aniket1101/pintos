@@ -18,28 +18,9 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "lib/user/syscall.h"
+#include "debug.h"
 
 #define WORD_SIZE 4
-
-// #define __DEBUG__
-// #define __HEX_DUMP__
-
-#ifdef __DEBUG__ 
-  #define PUTBUF_FORMAT(format, ...) ({\
-      char out[100];\
-      putbuf(out, snprintf(out, 100, format "\n", __VA_ARGS__));\
-    })
-  #define PUTBUF(str) (PUTBUF_FORMAT(str "%s", ""))
-#else
-  #define PUTBUF_FORMAT(format, ...)
-  #define PUTBUF(str) 
-#endif
-
-#ifdef __HEX_DUMP__ 
-  #define HEX_DUMP_ESP(esp) (hex_dump((uint32_t) esp, esp, PHYS_BASE - esp, 1))
-#else 
-  #define HEX_DUMP_ESP(esp)
-#endif
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);

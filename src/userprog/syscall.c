@@ -9,6 +9,7 @@
 #include "userprog/pagedir.h"
 #include "threads/vaddr.h"
 #include <string.h>
+#include "debug.h"
 
 #define MAX_SIZE 100
 
