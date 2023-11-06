@@ -15,7 +15,7 @@
 
 static void syscall_handler (struct intr_frame *);
 static int get_num_args(int syscall_num);
-static void check_pointer(void *ptr);
+static void *check_pointer(void *ptr);
 
 void
 syscall_init (void) 
@@ -47,27 +47,20 @@ syscall_handler (struct intr_frame *f)
       break;
     case SYS_WRITE:
       int fd = *((int*) args[0]);
-      void *buff = *((void **) args[1]);
-      check_pointer(buff);
+      void *buff = check_pointer(*((void **) args[1]));
       unsigned size = *((unsigned *) args[2]);
       f->eax = write(fd, buff, size);
       break;
   }
 }
 
-void check_pointer(void *ptr) {
-  struct thread *thread = thread_current();
-  bool valid = true;
-  if (ptr == NULL) {
-    valid = false;
-  } else if (is_kernel_vaddr(ptr)) {
-    valid = false;
-  } else if (pagedir_get_page(thread->pagedir, ptr)) {
-    valid = false;
-  }
-  if (!valid) {
+void *check_pointer(void *ptr) {
+  if (ptr == NULL || is_kernel_vaddr(ptr) 
+      || !pagedir_get_page(thread_current()->pagedir, ptr)) {
     thread_exit();
-  }
+  } 
+
+  return ptr;
 }
 
 int wait(pid_t pid UNUSED) {
