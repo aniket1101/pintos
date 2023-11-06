@@ -50,25 +50,26 @@ process_execute (const char *file_name)
   strlcpy (fn_copy, file_name, PGSIZE);
 
   char *token, *save_ptr;
-  struct arg arg = { .c = 0 };
-
+  
+  struct arg *arg;
+  arg = palloc_get_page(0);
+  memset (arg, 0, sizeof arg);
+  
   PUTBUF("Tokenize args:");
   for (token = strtok_r (fn_copy, " ", &save_ptr);
       token != NULL;
       token = strtok_r (NULL, " ", &save_ptr)) {
-    arg.v[arg.c++] = token;
-    PUTBUF_FORMAT("\targ[%d] = %s", arg.c - 1, arg.v[arg.c - 1]);
+    arg->v[arg->c++] = token;
+    PUTBUF_FORMAT("\targ[%d] = %s", arg->c - 1, arg->v[arg->c - 1]);
   }
 
-  struct arg *arg_copy;
-  arg_copy = palloc_get_page(0);
-  memcpy(arg_copy, &arg, sizeof(struct arg));
+  strlcpy(fn_copy, arg->v[0], PGSIZE);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (arg.v[0], PRI_DEFAULT, start_process, arg_copy);
+  tid = thread_create (fn_copy, PRI_DEFAULT, start_process, arg);
   if (tid == TID_ERROR) {
     palloc_free_page (fn_copy); 
-    palloc_free_page (arg_copy); 
+    palloc_free_page (arg); 
   }
   return tid;
 }
