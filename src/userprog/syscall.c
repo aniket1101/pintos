@@ -11,17 +11,37 @@
 #include "threads/vaddr.h"
 #include <string.h>
 #include "debug.h"
+#include <list.h>
+#include "filesys/filesys.h"
+#include "filesys/file.h"
+#include "devices/shutdown.h"
 
 #define MAX_SIZE 100
 
 static void syscall_handler (struct intr_frame *);
 static int get_num_args(int syscall_num);
 static void *check_pointer(void *ptr);
+int add_to_open_files(struct file *file);
+struct open_file * get_open_file(int fd);
+
+struct open_file {
+  struct list_elem elem;
+  int file_dir;
+  struct file *file;
+  // struct list readers;
+  bool to_be_removed;
+};
+
+static struct list open_files;
+
+// static struct lock *fd_lock;
 
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  // lock_init(fd_lock);
+  list_init(&open_files);
 }
 
 static void
@@ -84,15 +104,6 @@ void *check_pointer(void *ptr) {
   exit(-1);
 }
 
-int wait(pid_t pid UNUSED) {
-  // while (true) {
-  //   barrier();
-  // }
-
-  timer_sleep(600);
-  return -1;
-}
-
 void halt() {
   shutdown_power_off();
 }
@@ -109,12 +120,133 @@ void exit(int status) {
   thread_exit();
 }
 
+pid_t exec (const char *cmd_line UNUSED) {
+  // TODO
+  // process_execute(cmd_line);
+  // return pid -1;
+  return 0;
+
+}
+
+int wait(pid_t pid UNUSED) {
+  // while (true) {
+  //   barrier();
+  // }
+
+  timer_sleep(600);
+  return -1;
+}
+
+bool create (const char *file, unsigned initial_size) {
+  bool success = false;
+  if(!(strlen(file) > 14)) {
+    success = filesys_create(file, initial_size);
+  }
+  return success;
+}
+
+bool remove (const char *file) {
+  return filesys_remove(file);
+}
+
+int add_to_open_files(struct file *file) {
+  // Initialise new file
+  struct open_file new_file; 
+  new_file.file = file;
+  // new_file.readers = list_init(&readers);
+  new_file.to_be_removed = false;
+  
+  if (list_empty(&open_files)) {
+    // List is empty, so new dir will be 2
+    new_file.file_dir = 2;
+    list_push_front(&open_files, &(new_file.elem));
+
+    return new_file.file_dir;
+  } else {
+    // Initialised to 1 in the case that 2 is not being used
+    int pre_file_dir = 1;
+    // Initialised outside of the loop in the case it will be put at the end
+    struct list_elem *e = list_begin (&open_files); 
+    for (; e != list_end (&open_files); e = list_next (e))
+    {
+      // Finds a gap in ordered list and inserts new element
+      if (list_entry(e, struct open_file, elem)->file_dir - pre_file_dir > 1) {
+        new_file.file_dir = pre_file_dir + 1;
+        list_insert(&(new_file.elem), e);
+
+        return new_file.file_dir;
+      }
+      // Ensures that getting e->prev will not give the head for list_entry
+      if (e != list_begin (&open_files)) {
+        pre_file_dir = list_entry(e->prev, struct open_file, elem)->file_dir;
+      }
+    }
+    // e is pointing to the tail of the list
+    new_file.file_dir = list_entry(e->prev, struct open_file, elem)->file_dir + 1;
+  }
+  return -1;
+}
+
+int open(const char *file_name) {
+  // Get lock to modify open_files
+  // lock_acquire(fd_lock);
+  // Fails if no file named NAME exists, bool fail or fail fail?
+  // USES FILESYS
+  struct file *file = filesys_open(file_name);
+  if (file == NULL) {
+    return -1;
+  }
+  int fd = add_to_open_files(file);
+
+  // lock_release(fd_lock);
+  return fd;
+}
+
+int filesize(int fd) {
+  return file_length(get_open_file(fd)->file);
+}
+
 int write(int fd, const void *buffer, unsigned size) {
   if (fd == STDOUT_FILENO) {
+    // Write buffer to console
     putbuf((const char *) buffer, size);
+  } else {
+    // Write buffer to file, checking how many bytes can be written to
+    // int bytes_to_write = (unsigned) filesize(fd) < 
+    //                           size ? filesize(fd) : (int) size;
+    // return file_write(get_open_file(fd)->file, buffer, bytes_to_write);
   }
-  
   return size;
+}
+
+void seek(int fd, unsigned position) {
+  //TODO
+  file_seek(get_open_file(fd)->file, position);
+}
+
+unsigned tell(int fd) {
+  // TODO
+  return file_tell(get_open_file(fd)->file);
+}
+
+struct open_file * get_open_file(int fd) {
+  struct list_elem *e; 
+  for (e = list_begin (&open_files);
+    e != list_end (&open_files); e = list_next (e)) {
+    struct open_file *file = list_entry(e, struct open_file, elem);
+    if (file->file_dir == fd) {
+      return file;
+    }
+  }
+  return NULL;
+}
+
+void close(int fd) {
+  // lock_acquire(fd_lock);
+  struct open_file *file = get_open_file(fd);
+  list_remove(&(file->elem));
+  file_close(file->file);
+  // lock_release(fd_lock);
 }
 
 int get_num_args(int syscall_num) {
