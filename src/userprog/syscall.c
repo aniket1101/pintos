@@ -30,7 +30,7 @@ syscall_handler (struct intr_frame *f)
   PUTBUF("Start syscall:");
   HEX_DUMP_ESP(f->esp);  
 
-  int syscall_num = *((int *) (f->esp));
+  int syscall_num = *((int *) check_pointer(f->esp));
   PUTBUF_FORMAT("\tpopped syscall num = %d off at %p. moved stack up by %d", 
     syscall_num, f->esp, sizeof(int *)); 
 
