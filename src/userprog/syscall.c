@@ -37,7 +37,6 @@ syscall_handler (struct intr_frame *f)
   int num_args = get_num_args(syscall_num);
   PUTBUF_FORMAT("\tsyscall has %d args", num_args); 
   
-  
   PUTBUF("Pop args:");
   void *args[3];
   for (int i = 0; i < num_args; i++) {
@@ -56,15 +55,17 @@ syscall_handler (struct intr_frame *f)
       int status = *((int *) args[0]);
       exit(status);
       break;
+
     case SYS_WAIT:
       PUTBUF("Call wait()");
       pid_t pid = *((pid_t *) args[0]);
       f->eax = wait(pid);
       break;
+
     case SYS_WRITE:
       PUTBUF("Call write()");
       int fd = *((int*) args[0]);
-      void *buff = check_pointer(*((void **) args[1]));
+      void *buff = *((void **) args[1]);
       unsigned size = *((unsigned *) args[2]);
       f->eax = write(fd, buff, size);
       break;
@@ -142,6 +143,6 @@ int get_num_args(int syscall_num) {
     case SYS_WRITE:
       return 3;
     default:
-      return -1;
+      exit(-1);
   }
 }
