@@ -6,6 +6,7 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include "devices/timer.h"
+#include "devices/shutdown.h"
 #include "userprog/pagedir.h"
 #include "threads/vaddr.h"
 #include <string.h>
@@ -29,36 +30,42 @@ syscall_handler (struct intr_frame *f)
   PUTBUF("Start syscall:");
   HEX_DUMP_ESP(f->esp);  
 
-  int syscall_num = *((int *) (f->esp));
+  int syscall_num = *((int *) check_pointer(f->esp));
   PUTBUF_FORMAT("\tpopped syscall num = %d off at %p. moved stack up by %d", 
     syscall_num, f->esp, sizeof(int *)); 
 
   int num_args = get_num_args(syscall_num);
   PUTBUF_FORMAT("\tsyscall has %d args", num_args); 
   
-  
   PUTBUF("Pop args:");
   void *args[3];
   for (int i = 0; i < num_args; i++) {
-    args[i] = f->esp + sizeof(int *) + (i * sizeof(void *));
+    args[i] = check_pointer(f->esp + sizeof(int *) + (i * sizeof(void *)));
+
     PUTBUF_FORMAT("\targ[%d] at %p", i, args[i]);
   }
 
   switch (syscall_num) {
+    case SYS_HALT:
+      halt();
+      break;
+
     case SYS_EXIT:
       PUTBUF("Call exit()");
       int status = *((int *) args[0]);
       exit(status);
       break;
+
     case SYS_WAIT:
       PUTBUF("Call wait()");
       pid_t pid = *((pid_t *) args[0]);
       f->eax = wait(pid);
       break;
+
     case SYS_WRITE:
       PUTBUF("Call write()");
       int fd = *((int*) args[0]);
-      void *buff = check_pointer(*((void **) args[1]));
+      void *buff = *((void **) args[1]);
       unsigned size = *((unsigned *) args[2]);
       f->eax = write(fd, buff, size);
       break;
@@ -69,12 +76,12 @@ syscall_handler (struct intr_frame *f)
 }
 
 void *check_pointer(void *ptr) {
-  if (ptr == NULL || is_kernel_vaddr(ptr) 
-      || !pagedir_get_page(thread_current()->pagedir, ptr)) {
-    thread_exit();
+  if (ptr != NULL && is_user_vaddr(ptr) 
+      && pagedir_get_page(thread_current()->pagedir, ptr)) {
+    return ptr;
   } 
 
-  return ptr;
+  exit(-1);
 }
 
 int wait(pid_t pid UNUSED) {
@@ -84,6 +91,10 @@ int wait(pid_t pid UNUSED) {
 
   timer_sleep(600);
   return -1;
+}
+
+void halt() {
+  shutdown_power_off();
 }
 
 void exit(int status) {
@@ -132,6 +143,6 @@ int get_num_args(int syscall_num) {
     case SYS_WRITE:
       return 3;
     default:
-      return -1;
+      exit(-1);
   }
 }
