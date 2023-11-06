@@ -6,6 +6,7 @@
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include "devices/timer.h"
+#include "devices/shutdown.h"
 #include "userprog/pagedir.h"
 #include "threads/vaddr.h"
 #include <string.h>
@@ -45,6 +46,10 @@ syscall_handler (struct intr_frame *f)
   }
 
   switch (syscall_num) {
+    case SYS_HALT:
+      halt();
+      break;
+
     case SYS_EXIT:
       PUTBUF("Call exit()");
       int status = *((int *) args[0]);
@@ -84,6 +89,10 @@ int wait(pid_t pid UNUSED) {
 
   timer_sleep(600);
   return -1;
+}
+
+void halt() {
+  shutdown_power_off();
 }
 
 void exit(int status) {
