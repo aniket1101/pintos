@@ -22,6 +22,8 @@
 
 #define WORD_SIZE 4
 
+#define PAGE_SIZE 4096
+
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
@@ -114,6 +116,9 @@ start_process (void *file_name_)
 
 /* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
 void push_args(struct intr_frame *if_, const struct arg *arg) {
+  bool valid_args = true;
+  void *start_pointer = if_->esp;
+
   PUTBUF("Push args onto stack:");
   PUTBUF_FORMAT("\tesp at PHYS_BASE = %p", if_->esp);
   
@@ -181,6 +186,15 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   if_->esp -= sizeof(void *);
   *((void **) if_->esp) = NULL;
 
+  if (if_->esp < start_pointer - PAGE_SIZE) {
+    valid_args = false;
+  }
+
+  if (!valid_args) {
+    if_->esp = start_pointer;
+    thread_exit();
+    return;
+  }
   PUTBUF_FORMAT("\tmoved stack down by %d. pushed fake return = %p onto stack at %p", sizeof(void *), NULL, if_->esp);
   HEX_DUMP_ESP(if_->esp);
   PUTBUF_FORMAT("\tesp at %p", if_->esp);
