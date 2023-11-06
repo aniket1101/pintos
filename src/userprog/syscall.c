@@ -41,7 +41,8 @@ syscall_handler (struct intr_frame *f)
   PUTBUF("Pop args:");
   void *args[3];
   for (int i = 0; i < num_args; i++) {
-    args[i] = f->esp + sizeof(int *) + (i * sizeof(void *));
+    args[i] = check_pointer(f->esp + sizeof(int *) + (i * sizeof(void *)));
+
     PUTBUF_FORMAT("\targ[%d] at %p", i, args[i]);
   }
 
@@ -74,12 +75,12 @@ syscall_handler (struct intr_frame *f)
 }
 
 void *check_pointer(void *ptr) {
-  if (ptr == NULL || is_kernel_vaddr(ptr) 
-      || !pagedir_get_page(thread_current()->pagedir, ptr)) {
-    thread_exit();
+  if (ptr != NULL && is_user_vaddr(ptr) 
+      && pagedir_get_page(thread_current()->pagedir, ptr)) {
+    return ptr;
   } 
 
-  return ptr;
+  exit(-1);
 }
 
 int wait(pid_t pid UNUSED) {
