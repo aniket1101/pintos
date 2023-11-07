@@ -43,7 +43,7 @@ void init_file_info(struct file_info *info, int fd, struct file *file);
 void *fd_apply(int *fd, void *func);
 void *inside_apply(struct list_elem *curr, void *aux);
 void *outside_apply(void *func, void *aux);
-struct file_info *find_file(const char *file);
+struct file_info *find_file_info(const char *file);
 void make_file_info(struct file_info *info, char name[MAX_FILENAME_SIZE]);
 struct thread_fd_elem *find_fd_elem(int fd);
 bool is_fd_valid(int fd);
@@ -238,22 +238,22 @@ bool create (const char *file, unsigned initial_size) {
 }
 
 bool remove (const char *file) {
-  struct file_info *info = find_file(file);
+  struct file_info *info = find_file_info(file);
   info->to_remove = true;
-  if (list_empty(info->fds)) {
+  if (!info->is_open) {
     return filesys_remove(file);
   }
   return false;
 }
 
-struct file_info *find_file(const char *file) {
+struct file_info *find_file_info(const char *file) {
   return outside_apply(&get_file_info, (char *) file);
 }
 
-struct file_info *get_file_info(struct list_elem *elem, void *aux) {
-  struct file_info *info = list_entry(elem, struct file_info, elem);
+struct file_info *get_file_info(struct list_elem *element, void *aux) {
+  struct file_info *info = list_entry(element, struct file_info, elem);
   char *file = (char *) aux;
-  if (strcmp(info->name, file)) {
+  if (!strcmp(info->name, file)) {
     return info;
   }
   return NULL;
@@ -263,7 +263,7 @@ struct file_info *get_file_info(struct list_elem *elem, void *aux) {
 int open(const char *file_name) {
   // Get lock to modify all_files
   // lock_acquire(fd_lock);
-  struct file_info *info = find_file(file_name);
+  struct file_info *info = find_file_info(file_name);
   if (!info->is_open) {
     info->file = filesys_open(file_name);
     info->is_open = true;
@@ -372,7 +372,7 @@ void remove_fd(int fd) {
 void rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem) {
   struct file_info *info = list_entry(file_elem, struct file_info, elem);
   list_remove(fd_elem);
-  if (list_empty(info->fds) && info->to_remove) {
+  if (!info->is_open && info->to_remove) {
     list_remove(file_elem);
   }
 }
