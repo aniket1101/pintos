@@ -29,9 +29,13 @@ struct open_file * get_open_file(int fd);
 struct open_file {
   struct list_elem elem;
   int file_desc;
+  struct file_openers *file_openers;
+};
+
+struct file_openers {
   struct file *file;
-  // struct list readers;
   bool to_be_removed;
+  struct list openers;
 };
 
 static struct list open_files;
@@ -157,37 +161,79 @@ bool remove (const char *file) {
 int add_to_open_files(struct file *file) {
   // Initialise new file
   struct open_file new_file; 
-  new_file.file = file;
-  // new_file.readers = list_init(&readers);
-  new_file.to_be_removed = false;
+  struct file_openers new_file_openers;
+
+  // Set pointer to file openers (assuming new file is not in the list already)
+  new_file.file_openers = &new_file_openers;
   
   if (list_empty(&open_files)) {
     // List is empty, so new desc will be 2
     new_file.file_desc = 2;
-    list_push_front(&open_files, &(new_file.elem));
+
+    // List is empty so file cannot already be in list
+    new_file_openers.file = file;
+    new_file_openers.to_be_removed = false;
+    list_init(&(new_file_openers.openers));
+
+    // Put new open file in open files and put current thread in openers
+    list_push_back(&open_files, &(new_file.elem));
+    list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
 
     return new_file.file_desc;
   } else {
+    /* As this list is not empty, traverse list to check if the file exists in
+      the list already, if so, it can point to the same file_openers struct. */
+    bool file_in_list = false;
+    for (struct list_elem *e = list_begin (&open_files); 
+    e != list_end (&open_files); e = list_next (e)) {
+      if(list_entry(e, struct open_file, elem)->file_openers->file == file) {
+        /* If the file is already in the list, then point to pre-existing 
+        file openers struct from new open file. */
+        new_file.file_openers = list_entry(e, 
+                                      struct open_file, elem)->file_openers;
+        file_in_list = true;
+      }
+    }
+
+    // If file is not in open_files list, set the members of the file_openers
+    if (!file_in_list) {
+      new_file_openers.file = file;
+      new_file_openers.to_be_removed = false;
+      list_init(&(new_file_openers.openers));
+    }
+
     // Initialised to 1 in the case that 2 is not being used
     int pre_file_desc = 1;
-    // Initialised outside of the loop in the case it will be put at the end
+
+    // Initialised outside of the loop in the case there are no gaps
     struct list_elem *e = list_begin (&open_files); 
     for (; e != list_end (&open_files); e = list_next (e))
     {
       // Finds a gap in ordered list and inserts new element
-      if (list_entry(e, struct open_file, elem)->file_desc - pre_file_desc > 1) {
-        new_file.file_desc = pre_file_desc + 1;
-        list_insert(&(new_file.elem), e);
+      if (list_entry(e, struct open_file, 
+            elem)->file_desc - pre_file_desc > 1) {
 
+        // Put description 1 greater than the start of the gap
+        new_file.file_desc = pre_file_desc + 1;
+
+        /* Put new open file in open files list and insert 
+           it in the gap and put current thread in openers */
+        list_insert(e, &(new_file.elem));
+        list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
         return new_file.file_desc;
       }
-      // Ensures that getting e->prev will not give the head for list_entry
-      if (e != list_begin (&open_files)) {
-        pre_file_desc = list_entry(e->prev, struct open_file, elem)->file_desc;
-      }
+
+      // Save previous desc value to see gap between consecutive descs
+      pre_file_desc = list_entry(e, struct open_file, elem)->file_desc;
     }
+
     // e is pointing to the tail of the list
     new_file.file_desc = list_entry(e->prev, struct open_file, elem)->file_desc + 1;
+
+    // Put current thread in openers and put open file in open files
+    list_insert(e, &(new_file.elem));
+    list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
+    return new_file.file_desc;
   }
   return -1;
 }
@@ -208,9 +254,9 @@ int open(const char *file_name) {
 }
 
 int filesize(int fd) {
-  struct file *file = get_open_file(fd)->file;
+  struct file *file = get_open_file(fd)->file_openers->file;
   if (file != NULL) {
-    return file_length(get_open_file(fd)->file);
+    return file_length(get_open_file(fd)->file_openers->file);
   }
   return 0;
 }
@@ -219,7 +265,7 @@ int read(int fd, void *buffer, unsigned size) {
   if (fd == STDIN_FILENO) {
     return input_getc();
   } else {
-    return file_read(get_open_file(fd)->file, buffer, size);
+    return file_read(get_open_file(fd)->file_openers->file, buffer, size);
   }
 }
 
@@ -236,7 +282,7 @@ int write(int fd, const void *buffer, unsigned size) {
 
 void seek(int fd, unsigned position) {
   //TODO
-  struct file *file = get_open_file(fd)->file;
+  struct file *file = get_open_file(fd)->file_openers->file;
   // Position is above 0 as it is unsigned, assertion will not fail
   if (file != NULL) {
     file_seek(file, position);
@@ -245,7 +291,7 @@ void seek(int fd, unsigned position) {
 
 unsigned tell(int fd) {
   // TODO
-  struct file *file = get_open_file(fd)->file;
+  struct file *file = get_open_file(fd)->file_openers->file;
   if (file != NULL) {
     return file_tell(file);
   }
@@ -269,7 +315,7 @@ void close(int fd) {
   struct open_file *file = get_open_file(fd);
   if (file != NULL) {
     list_remove(&(file->elem));
-    file_close(file->file);
+    file_close(file->file_openers->file);
   }
   // lock_release(fd_lock);
 }
