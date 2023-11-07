@@ -677,6 +677,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->eff_priority = priority;
   list_init(&t->held_locks);
   t->magic = THREAD_MAGIC;
+  #ifdef USERPROG
+  struct list fds;
+  list_init(&fds);
+  t->fds = &fds;
+  #endif
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);

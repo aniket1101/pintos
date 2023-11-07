@@ -111,7 +111,8 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;               /* Page directory. */
-   int exit_code;                    /* Exit code. */
+    int exit_code;                   /* Exit code. */
+    struct list *fds;                /* List of fds thread knows*/
 #endif
 
     /* Owned by thread.c. */
