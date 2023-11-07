@@ -23,7 +23,9 @@
 static void syscall_handler (struct intr_frame *);
 static int get_num_args(int syscall_num);
 static void *check_pointer(void *ptr);
-struct open_file * get_open_file(int fd);
+// struct open_file * get_open_file(int fd);
+
+typedef void (*fd_function)(int);
 
 struct file_info {
 	struct list *fds;
@@ -163,7 +165,7 @@ bool remove (const char *file) {
   return filesys_remove(file);
 }
 
-struct file * fd_to_file(int fd) {
+void* fd_apply(int fd, fd_function *func) {
   struct list_elem *curr;
   struct list_elem *elem;
   for (curr = list_begin(&open_files); 
@@ -173,11 +175,20 @@ struct file * fd_to_file(int fd) {
        elem != list_end(&(info->fds)); elem = list_next(elem)) {
       struct fd_elem *fd_e = list_entry(fd_e, struct fd_elem, fd_elem)
       if (fd == fd_e->fd) {
-        return info->file;
+        return func(curr, elem);
       }
     }
   }
   return NULL;
+}
+
+struct file *fd_to_file(int fd) {
+  return fd_apply(fd, &get_file);
+}
+
+struct file *get_file(struct list_elem *file_elem, struct list_elem fd_elem UNUSED) {
+  struct file_info *info = list_entry(curr, struct file_info, elem);
+  return info->file;
 }
 
 // int add_to_open_files(struct file *file) {
