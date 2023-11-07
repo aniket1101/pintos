@@ -19,13 +19,14 @@
 #include "devices/input.h"
 
 #define MAX_SIZE 100
+#define MAX_FILENAME_SIZE 14
+
+typedef void * (*elemFunc) (struct list_elem *, struct list_elem *);
+typedef void * (*infoFunc) (struct list_elem *, void *);
 
 static void syscall_handler (struct intr_frame *);
 static int get_num_args(int syscall_num);
 static void *check_pointer(void *ptr);
-// struct open_file * get_open_file(int fd);
-
-typedef void (*fd_function)(int);
 
 struct file_info {
 	struct list *fds;
@@ -34,6 +35,16 @@ struct file_info {
 	struct list_elem elem;
 };
 
+void rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem);
+void remove_fd(int fd);
+struct file *get_file(struct list_elem *file_elem, struct list_elem fd_elem UNUSED);
+struct file *fd_to_file(int fd);
+void init_file_info(struct file_info *info, int fd, struct file *file);
+void *fd_apply(int *fd, void *func);
+void *inside_apply(struct list_elem *curr, void *aux);
+void *outside_apply(void *func, void *aux);
+// struct open_file * get_open_file(int fd);
+
 static struct list open_files;
 
 // static struct lock *fd_lock;
@@ -41,9 +52,9 @@ static struct list open_files;
 void init_file_info(struct file_info *info, int fd, struct file *file) {
   struct list fds;
   list_init(&fds);
-  struct fd_elem;
-  fd_elem.fd = fd;
-  list_push_back(&fds, &fd_elem);
+  struct fd_elem el;
+  el.fd = fd;
+  list_push_back(&fds, &(el.fd_e));
   info->fds = &fds;
   info->to_remove = false;
   info->file = file;
@@ -117,6 +128,61 @@ void *check_pointer(void *ptr) {
   exit(-1);
 }
 
+// void *fd_apply(int fd, fd_function *func) {
+//   struct list_elem *curr;
+//   struct list_elem *elem;
+  
+//   for (curr = list_begin(&open_files); 
+//        curr != list_end(&open_files); curr = list_next(curr)) {
+//     struct file_info *info = list_entry(curr, struct file_info, elem);
+
+//     for (elem = list_begin(&(info->fds)); 
+//        elem != list_end(&(info->fds)); elem = list_next(elem)) {
+//       struct fd_elem *fd_e = list_entry(fd_e, struct fd_elem, fd_elem)
+
+//       if (fd == fd_e->fd) {
+//         return func(curr, elem);
+//       }
+
+//     }
+//   }
+//   return NULL;
+// }
+
+void *outside_apply(void *func, void *aux) {
+  struct list_elem *curr;
+  infoFunc funct = (infoFunc) func;
+
+  for (curr = list_begin(&open_files); 
+       curr != list_end(&open_files); curr = list_next(curr)) {
+    funct(curr, aux);
+  }
+  return NULL;
+}
+
+void *fd_apply(int *fd, void *func) {
+  void *aux[2] = {fd, func};
+  return outside_apply(&inside_apply, aux);
+}
+
+void *inside_apply(struct list_elem *curr, void *aux) {
+  struct file_info *info = list_entry(curr, struct file_info, elem);
+  struct list_elem *elem;
+  int fd = *((int *) (aux)); 
+  elemFunc func = (elemFunc) (aux + sizeof(int)); 
+
+  for (elem = list_begin(info->fds); 
+      elem != list_end(info->fds); elem = list_next(elem)) {
+    struct fd_elem *fd_el = list_entry(elem, struct fd_elem, fd_e);
+
+    if (fd == fd_el->fd) {
+      return func(curr, elem);
+    }
+
+  }
+  return NULL;
+}
+
 void halt() {
   shutdown_power_off();
 }
@@ -133,6 +199,7 @@ void exit(int status) {
   thread_exit();
 }
 
+// TODO
 pid_t exec (const char *cmd_line) {
 
   pid_t pid = ((pid_t) process_execute(cmd_line));
@@ -144,6 +211,7 @@ pid_t exec (const char *cmd_line) {
   return pid - 1;
 }
 
+// TODO
 int wait(pid_t pid UNUSED) {
   // while (true) {
   //   barrier();
@@ -154,122 +222,19 @@ int wait(pid_t pid UNUSED) {
 }
 
 bool create (const char *file, unsigned initial_size) {
-  bool success = false;
-  if(file != NULL && strlen(file) <= 14) {
-    success = filesys_create(file, initial_size);
+  if(file != NULL && strlen(file) <= MAX_FILENAME_SIZE) {
+    return filesys_create(file, initial_size);
   }
-  return success;
+  return false;
 }
 
 bool remove (const char *file) {
-  return filesys_remove(file);
-}
+  if (filesys_remove(file)) {
 
-void* fd_apply(int fd, fd_function *func) {
-  struct list_elem *curr;
-  struct list_elem *elem;
-  for (curr = list_begin(&open_files); 
-       curr != list_end(&open_files); curr = list_next(curr)) {
-    struct file_info *info = list_entry(curr, struct file_info, elem);
-    for (elem = list_begin(&(info->fds)); 
-       elem != list_end(&(info->fds)); elem = list_next(elem)) {
-      struct fd_elem *fd_e = list_entry(fd_e, struct fd_elem, fd_elem)
-      if (fd == fd_e->fd) {
-        return func(curr, elem);
-      }
-    }
+    return true;
   }
-  return NULL;
+  return false;
 }
-
-struct file *fd_to_file(int fd) {
-  return fd_apply(fd, &get_file);
-}
-
-struct file *get_file(struct list_elem *file_elem, struct list_elem fd_elem UNUSED) {
-  struct file_info *info = list_entry(curr, struct file_info, elem);
-  return info->file;
-}
-
-// int add_to_open_files(struct file *file) {
-//   // Initialise new file
-//   struct open_file new_file; 
-//   struct file_openers new_file_openers;
-
-//   // Set pointer to file openers (assuming new file is not in the list already)
-//   new_file.file_openers = &new_file_openers;
-  
-//   if (list_empty(&open_files)) {
-//     // List is empty, so new desc will be 2
-//     new_file.file_desc = 2;
-
-//     // List is empty so file cannot already be in list
-//     new_file_openers.file = file;
-//     new_file_openers.to_be_removed = false;
-//     list_init(&(new_file_openers.openers));
-
-//     // Put new open file in open files and put current thread in openers
-//     list_push_back(&open_files, &(new_file.elem));
-//     list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
-
-//     return new_file.file_desc;
-//   } else {
-//     /* As this list is not empty, traverse list to check if the file exists in
-//       the list already, if so, it can point to the same file_openers struct. */
-//     bool file_in_list = false;
-//     for (struct list_elem *e = list_begin (&open_files); 
-//     e != list_end (&open_files); e = list_next (e)) {
-//       if(list_entry(e, struct open_file, elem)->file_openers->file == file) {
-//         /* If the file is already in the list, then point to pre-existing 
-//         file openers struct from new open file. */
-//         new_file.file_openers = 
-//           list_entry(e, struct open_file, elem)->file_openers;
-//         file_in_list = true;
-//       }
-//     }
-
-//     // If file is not in open_files list, set the members of the file_openers
-//     if (!file_in_list) {
-//       new_file_openers.file = file;
-//       new_file_openers.to_be_removed = false;
-//       list_init(&(new_file_openers.openers));
-//     }
-
-//     // Initialised to 1 in the case that 2 is not being used
-//     int pre_file_desc = 1;
-
-//     // Initialised outside of the loop in the case there are no gaps
-//     struct list_elem *e = list_begin (&open_files); 
-//     for (; e != list_end (&open_files); e = list_next (e))
-//     {
-//       // Finds a gap in ordered list and inserts new element
-//       if (list_entry(e, struct open_file, 
-//             elem)->file_desc - pre_file_desc > 1) {
-
-//         // Put description 1 greater than the start of the gap
-//         new_file.file_desc = pre_file_desc + 1;
-
-//         /* Put new open file in open files list and insert 
-//            it in the gap and put current thread in openers */
-//         list_insert(e, &(new_file.elem));
-//         list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
-//         return new_file.file_desc;
-//       }
-
-//       // Save previous desc value to see gap between consecutive descs
-//       pre_file_desc = list_entry(e, struct open_file, elem)->file_desc;
-//     }
-
-//     // e is pointing to the tail of the list
-//     new_file.file_desc = list_entry(e->prev, struct open_file, elem)->file_desc + 1;
-
-//     // Put current thread in openers and put open file in open files
-//     list_insert(e, &(new_file.elem));
-//     list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
-//     return new_file.file_desc;
-//   }
-//   return -1;
-// }
 
 // // TODO
 // int open(const char *file_name) {
@@ -302,19 +267,19 @@ struct file *get_file(struct list_elem *file_elem, struct list_elem fd_elem UNUS
 //   }
 // }
 
-// int write(int fd, const void *buffer, unsigned size) {
-//   if (fd == STDOUT_FILENO) {
-//     // Write buffer to console
-//     putbuf((const char *) buffer, size);
-//   } else {
-//     // Write buffer to file, checking how many bytes can be written to
-//     // return file_write(get_open_file(fd)->file, buffer, size);
-//   }
-//   return size;
-// }
+// TODO
+int write(int fd, const void *buffer, unsigned size) {
+  if (fd == STDOUT_FILENO) {
+    // Write buffer to console
+    putbuf((const char *) buffer, size);
+  } else {
+    // Write buffer to file, checking how many bytes can be written to
+    // return file_write(get_open_file(fd)->file, buffer, size);
+  }
+  return size;
+}
 
 // void seek(int fd, unsigned position) {
-//   //TODO
 //   struct file *file = get_open_file(fd)->file_openers->file;
 //   // Position is above 0 as it is unsigned, assertion will not fail
 //   if (file != NULL) {
@@ -322,35 +287,43 @@ struct file *get_file(struct list_elem *file_elem, struct list_elem fd_elem UNUS
 //   }
 // }
 
-unsigned tell(int fd) {
-  // TODO
-  struct file *file = get_open_file(fd)->file_openers->file;
-  if (file != NULL) {
-    return file_tell(file);
-  }
-  return -1;
+// unsigned tell(int fd) {
+//   struct file *file = get_open_file(fd)->file_openers->file;
+//   if (file != NULL) {
+//     return file_tell(file);
+//   }
+//   return -1;
+// }
+
+// void close(int fd) {
+//   // lock_acquire(fd_lock);
+//   struct open_file *file = get_open_file(fd);
+//   if (file != NULL) {
+//     list_remove(&(file->elem));
+//     file_close(file->file_openers->file);
+//   }
+//   // lock_release(fd_lock);
+// }
+
+struct file *fd_to_file(int fd) {
+  return (struct file *) fd_apply(&fd, &get_file);
 }
 
-struct open_file * get_open_file(int fd) {
-  struct list_elem *e; 
-  for (e = list_begin (&open_files);
-    e != list_end (&open_files); e = list_next (e)) {
-    struct open_file *file = list_entry(e, struct open_file, elem);
-    if (file->file_desc == fd) {
-      return file;
-    }
-  }
-  return NULL;
+struct file *get_file(struct list_elem *file_elem, struct list_elem fd_elem UNUSED) {
+  struct file_info *info = list_entry(file_elem, struct file_info, elem);
+  return info->file;
 }
 
-void close(int fd) {
-  // lock_acquire(fd_lock);
-  struct open_file *file = get_open_file(fd);
-  if (file != NULL) {
-    list_remove(&(file->elem));
-    file_close(file->file_openers->file);
+void remove_fd(int fd) {
+  fd_apply(&fd, &rem_fd);
+}
+
+void rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem) {
+  struct file_info *info = list_entry(file_elem, struct file_info, elem);
+  list_remove(fd_elem);
+  if (list_empty(info->fds) && info->to_remove) {
+    list_remove(file_elem);
   }
-  // lock_release(fd_lock);
 }
 
 int get_num_args(int syscall_num) {
