@@ -23,24 +23,29 @@
 static void syscall_handler (struct intr_frame *);
 static int get_num_args(int syscall_num);
 static void *check_pointer(void *ptr);
-int add_to_open_files(struct file *file);
 struct open_file * get_open_file(int fd);
 
-struct open_file {
-  struct list_elem elem;
-  int file_desc;
-  struct file_openers *file_openers;
-};
-
-struct file_openers {
-  struct file *file;
-  bool to_be_removed;
-  struct list openers;
+struct file_info {
+	struct list *fds;
+	struct file *file;
+	bool to_remove;
+	struct list_elem elem;
 };
 
 static struct list open_files;
 
 // static struct lock *fd_lock;
+
+void init_file_info(struct file_info *info, int fd, struct file *file) {
+  struct list fds;
+  list_init(&fds);
+  struct fd_elem;
+  fd_elem.fd = fd;
+  list_push_back(&fds, &fd_elem);
+  info->fds = &fds;
+  info->to_remove = false;
+  info->file = file;
+}
 
 void
 syscall_init (void) 
@@ -158,136 +163,153 @@ bool remove (const char *file) {
   return filesys_remove(file);
 }
 
-int add_to_open_files(struct file *file) {
-  // Initialise new file
-  struct open_file new_file; 
-  struct file_openers new_file_openers;
+struct file * fd_to_file(int fd) {
+  struct list_elem *curr;
+  struct list_elem *elem;
+  for (curr = list_begin(&open_files); 
+       curr != list_end(&open_files); curr = list_next(curr)) {
+    struct file_info *info = list_entry(curr, struct file_info, elem);
+    for (elem = list_begin(&(info->fds)); 
+       elem != list_end(&(info->fds)); elem = list_next(elem)) {
+      struct fd_elem *fd_e = list_entry(fd_e, struct fd_elem, fd_elem)
+      if (fd == fd_e->fd) {
+        return info->file;
+      }
+    }
+  }
+  return NULL;
+}
 
-  // Set pointer to file openers (assuming new file is not in the list already)
-  new_file.file_openers = &new_file_openers;
+// int add_to_open_files(struct file *file) {
+//   // Initialise new file
+//   struct open_file new_file; 
+//   struct file_openers new_file_openers;
+
+//   // Set pointer to file openers (assuming new file is not in the list already)
+//   new_file.file_openers = &new_file_openers;
   
-  if (list_empty(&open_files)) {
-    // List is empty, so new desc will be 2
-    new_file.file_desc = 2;
+//   if (list_empty(&open_files)) {
+//     // List is empty, so new desc will be 2
+//     new_file.file_desc = 2;
 
-    // List is empty so file cannot already be in list
-    new_file_openers.file = file;
-    new_file_openers.to_be_removed = false;
-    list_init(&(new_file_openers.openers));
+//     // List is empty so file cannot already be in list
+//     new_file_openers.file = file;
+//     new_file_openers.to_be_removed = false;
+//     list_init(&(new_file_openers.openers));
 
-    // Put new open file in open files and put current thread in openers
-    list_push_back(&open_files, &(new_file.elem));
-    list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
+//     // Put new open file in open files and put current thread in openers
+//     list_push_back(&open_files, &(new_file.elem));
+//     list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
 
-    return new_file.file_desc;
-  } else {
-    /* As this list is not empty, traverse list to check if the file exists in
-      the list already, if so, it can point to the same file_openers struct. */
-    bool file_in_list = false;
-    for (struct list_elem *e = list_begin (&open_files); 
-    e != list_end (&open_files); e = list_next (e)) {
-      if(list_entry(e, struct open_file, elem)->file_openers->file == file) {
-        /* If the file is already in the list, then point to pre-existing 
-        file openers struct from new open file. */
-        new_file.file_openers = list_entry(e, 
-                                      struct open_file, elem)->file_openers;
-        file_in_list = true;
-      }
-    }
+//     return new_file.file_desc;
+//   } else {
+//     /* As this list is not empty, traverse list to check if the file exists in
+//       the list already, if so, it can point to the same file_openers struct. */
+//     bool file_in_list = false;
+//     for (struct list_elem *e = list_begin (&open_files); 
+//     e != list_end (&open_files); e = list_next (e)) {
+//       if(list_entry(e, struct open_file, elem)->file_openers->file == file) {
+//         /* If the file is already in the list, then point to pre-existing 
+//         file openers struct from new open file. */
+//         new_file.file_openers = 
+//           list_entry(e, struct open_file, elem)->file_openers;
+//         file_in_list = true;
+//       }
+//     }
 
-    // If file is not in open_files list, set the members of the file_openers
-    if (!file_in_list) {
-      new_file_openers.file = file;
-      new_file_openers.to_be_removed = false;
-      list_init(&(new_file_openers.openers));
-    }
+//     // If file is not in open_files list, set the members of the file_openers
+//     if (!file_in_list) {
+//       new_file_openers.file = file;
+//       new_file_openers.to_be_removed = false;
+//       list_init(&(new_file_openers.openers));
+//     }
 
-    // Initialised to 1 in the case that 2 is not being used
-    int pre_file_desc = 1;
+//     // Initialised to 1 in the case that 2 is not being used
+//     int pre_file_desc = 1;
 
-    // Initialised outside of the loop in the case there are no gaps
-    struct list_elem *e = list_begin (&open_files); 
-    for (; e != list_end (&open_files); e = list_next (e))
-    {
-      // Finds a gap in ordered list and inserts new element
-      if (list_entry(e, struct open_file, 
-            elem)->file_desc - pre_file_desc > 1) {
+//     // Initialised outside of the loop in the case there are no gaps
+//     struct list_elem *e = list_begin (&open_files); 
+//     for (; e != list_end (&open_files); e = list_next (e))
+//     {
+//       // Finds a gap in ordered list and inserts new element
+//       if (list_entry(e, struct open_file, 
+//             elem)->file_desc - pre_file_desc > 1) {
 
-        // Put description 1 greater than the start of the gap
-        new_file.file_desc = pre_file_desc + 1;
+//         // Put description 1 greater than the start of the gap
+//         new_file.file_desc = pre_file_desc + 1;
 
-        /* Put new open file in open files list and insert 
-           it in the gap and put current thread in openers */
-        list_insert(e, &(new_file.elem));
-        list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
-        return new_file.file_desc;
-      }
+//         /* Put new open file in open files list and insert 
+//            it in the gap and put current thread in openers */
+//         list_insert(e, &(new_file.elem));
+//         list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
+//         return new_file.file_desc;
+//       }
 
-      // Save previous desc value to see gap between consecutive descs
-      pre_file_desc = list_entry(e, struct open_file, elem)->file_desc;
-    }
+//       // Save previous desc value to see gap between consecutive descs
+//       pre_file_desc = list_entry(e, struct open_file, elem)->file_desc;
+//     }
 
-    // e is pointing to the tail of the list
-    new_file.file_desc = list_entry(e->prev, struct open_file, elem)->file_desc + 1;
+//     // e is pointing to the tail of the list
+//     new_file.file_desc = list_entry(e->prev, struct open_file, elem)->file_desc + 1;
 
-    // Put current thread in openers and put open file in open files
-    list_insert(e, &(new_file.elem));
-    list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
-    return new_file.file_desc;
-  }
-  return -1;
-}
+//     // Put current thread in openers and put open file in open files
+//     list_insert(e, &(new_file.elem));
+//     list_push_back(&(new_file_openers.openers), &(thread_current()->elem));
+//     return new_file.file_desc;
+//   }
+//   return -1;
+// }
 
-// TODO
-int open(const char *file_name) {
-  // Get lock to modify open_files
-  // lock_acquire(fd_lock);
-  struct file *file = filesys_open(file_name);
-  if (file == NULL) {
-    // lock_release(fd_lock);
-    return -1;
-  }
-  int fd = add_to_open_files(file);
+// // TODO
+// int open(const char *file_name) {
+//   // Get lock to modify open_files
+//   // lock_acquire(fd_lock);
+//   struct file *file = filesys_open(file_name);
+//   if (file == NULL) {
+//     // lock_release(fd_lock);
+//     return -1;
+//   }
+//   int fd = add_to_open_files(file);
 
-  // lock_release(fd_lock);
-  return fd;
-}
+//   // lock_release(fd_lock);
+//   return fd;
+// }
 
-int filesize(int fd) {
-  struct file *file = get_open_file(fd)->file_openers->file;
-  if (file != NULL) {
-    return file_length(get_open_file(fd)->file_openers->file);
-  }
-  return 0;
-}
+// int filesize(int fd) {
+//   struct file *file = get_open_file(fd)->file_openers->file;
+//   if (file != NULL) {
+//     return file_length(get_open_file(fd)->file_openers->file);
+//   }
+//   return 0;
+// }
 
-int read(int fd, void *buffer, unsigned size) {
-  if (fd == STDIN_FILENO) {
-    return input_getc();
-  } else {
-    return file_read(get_open_file(fd)->file_openers->file, buffer, size);
-  }
-}
+// int read(int fd, void *buffer, unsigned size) {
+//   if (fd == STDIN_FILENO) {
+//     return input_getc();
+//   } else {
+//     return file_read(get_open_file(fd)->file_openers->file, buffer, size);
+//   }
+// }
 
-int write(int fd, const void *buffer, unsigned size) {
-  if (fd == STDOUT_FILENO) {
-    // Write buffer to console
-    putbuf((const char *) buffer, size);
-  } else {
-    // Write buffer to file, checking how many bytes can be written to
-    // return file_write(get_open_file(fd)->file, buffer, size);
-  }
-  return size;
-}
+// int write(int fd, const void *buffer, unsigned size) {
+//   if (fd == STDOUT_FILENO) {
+//     // Write buffer to console
+//     putbuf((const char *) buffer, size);
+//   } else {
+//     // Write buffer to file, checking how many bytes can be written to
+//     // return file_write(get_open_file(fd)->file, buffer, size);
+//   }
+//   return size;
+// }
 
-void seek(int fd, unsigned position) {
-  //TODO
-  struct file *file = get_open_file(fd)->file_openers->file;
-  // Position is above 0 as it is unsigned, assertion will not fail
-  if (file != NULL) {
-    file_seek(file, position);
-  }
-}
+// void seek(int fd, unsigned position) {
+//   //TODO
+//   struct file *file = get_open_file(fd)->file_openers->file;
+//   // Position is above 0 as it is unsigned, assertion will not fail
+//   if (file != NULL) {
+//     file_seek(file, position);
+//   }
+// }
 
 unsigned tell(int fd) {
   // TODO
