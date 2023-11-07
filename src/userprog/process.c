@@ -20,7 +20,9 @@
 #include "lib/user/syscall.h"
 #include "debug.h"
 
-#define WORD_SIZE 4
+#define PUSH_ESP(val, type) \
+  if_->esp -= sizeof(type); \
+  *((type *) if_->esp) = val
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
@@ -96,7 +98,7 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   if (!success) {
     PUTBUF("Load failed");
-    thread_exit ();
+    exit(-1);
   } 
 
   push_args(&if_, arg);
@@ -115,11 +117,10 @@ start_process (void *file_name_)
 
 /* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
 void push_args(struct intr_frame *if_, const struct arg *arg) {
-  void *esp_start = if_->esp;
-
   PUTBUF("Push args onto stack:");
   PUTBUF_FORMAT("\tesp at PHYS_BASE = %p", if_->esp);
   
+  void *esp_start = if_->esp;
   void *arg_ptrs[arg->c];
 
   /* Push arguments on the stack */
@@ -147,8 +148,7 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   HEX_DUMP_ESP(if_->esp);
 
   /* Push a null pointer sentinel on the stack */
-  if_->esp -= sizeof(void *);
-  *((int *) if_->esp) = 0;
+  PUSH_ESP(NULL, void *);
 
   PUTBUF_FORMAT("\tmoved stack down by %d. pushed NULL sentinel onto stack at %p", 
     sizeof(NULL), if_->esp);
@@ -156,8 +156,7 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
  
   /* Push pointers to arguments on the stack */
   for (int i = arg->c - 1; i >= 0; i--) {
-    if_->esp -= sizeof(void *);
-    *((void**) if_->esp) = arg_ptrs[i];
+    PUSH_ESP(arg_ptrs[i], void *);
     
     PUTBUF_FORMAT("\tmoved stack down by %d. pushed pointer = %p to arg[%d] onto stack at %p", 
       sizeof(void *), arg_ptrs[i], i, if_->esp);
@@ -165,26 +164,26 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   }
 
   /* Push first pointer on the stack */
-  if_->esp -= sizeof(void *);
-  PUTBUF_FORMAT("\tmoved stack down by %d. pushed first pointer = %p onto stack at %p", 
+  // if_->esp -= sizeof(void *);
+  PUTBUF_FORMAT("\tmoved stack down by %d. "
+    "pushed first pointer = %p onto stack at %p", 
     sizeof(void*), if_->esp + sizeof(void *), if_->esp);
 
-  *((void**) if_->esp) = if_->esp + sizeof(void *);
+  PUSH_ESP(if_->esp + WORD_SIZE, void *);
   HEX_DUMP_ESP(if_->esp);
 
   /* Push the number of arguments on the stack */
-  if_->esp -= sizeof(int);
-  *((int *) if_->esp) = arg->c;
+  PUSH_ESP(arg->c, int);
 
   PUTBUF_FORMAT("\tmoved stack down by %d. pushed argc = %d onto stack at %p", 
     sizeof(int), arg->c, if_->esp);
   HEX_DUMP_ESP(if_->esp);
 
   /* Push a fake return address on the stack */
-  if_->esp -= sizeof(void *);
-  *((void **) if_->esp) = NULL;
+  PUSH_ESP(NULL, void *);
 
-  PUTBUF_FORMAT("\tmoved stack down by %d. pushed fake return = %p onto stack at %p", sizeof(void *), NULL, if_->esp);
+  PUTBUF_FORMAT("\tmoved stack down by %d. pushed fake return = %p onto stack at %p", 
+    sizeof(void *), NULL, if_->esp);
   HEX_DUMP_ESP(if_->esp);
   PUTBUF_FORMAT("\tesp at %p", if_->esp);
 
