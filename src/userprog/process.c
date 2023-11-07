@@ -1,10 +1,10 @@
-#include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "userprog/process.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -28,8 +28,8 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 struct arg {
-  char *v[64];
   int c;
+  char v[];
 };
 
 static void push_args(struct intr_frame *if_, const struct arg *arg);
@@ -41,36 +41,32 @@ static void push_args(struct intr_frame *if_, const struct arg *arg);
 tid_t
 process_execute (const char *file_name) 
 {
-  char *fn_copy;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
-    return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  char fn_copy[strlen(file_name) + 1];
+  strlcpy (fn_copy, file_name, strlen(file_name) + 1);
 
+  struct arg *arg = palloc_get_page(0);
+
+  int i = 0;
   char *token, *save_ptr;
-  
-  struct arg *arg;
-  arg = palloc_get_page(0);
-  memset (arg, 0, sizeof arg);
-  
   PUTBUF("Tokenize args:");
   for (token = strtok_r (fn_copy, " ", &save_ptr);
       token != NULL;
       token = strtok_r (NULL, " ", &save_ptr)) {
-    arg->v[arg->c++] = token;
-    PUTBUF_FORMAT("\targ[%d] = %s", arg->c - 1, arg->v[arg->c - 1]);
+
+    strlcpy(arg->v + i, token, strlen(token) + 1);
+    PUTBUF_FORMAT("\targ[%d] = %s", arg->c, arg->v + i);
+    
+    i += strlen(token) + 1; 
+    arg->c++;
   }
 
-  strlcpy(fn_copy, arg->v[0], PGSIZE);
-
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (fn_copy, PRI_DEFAULT, start_process, arg);
+  tid = thread_create (arg->v, PRI_DEFAULT, start_process, arg);
   if (tid == TID_ERROR) {
-    palloc_free_page (fn_copy); 
     palloc_free_page (arg); 
   }
   return tid;
@@ -93,7 +89,7 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (arg->v[0], &if_.eip, &if_.esp);
+  success = load (arg->v, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   if (!success) {
@@ -117,25 +113,28 @@ start_process (void *file_name_)
 
 /* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
 void push_args(struct intr_frame *if_, const struct arg *arg) {
+  ASSERT(if_->esp == PHYS_BASE);
+
   PUTBUF("Push args onto stack:");
   PUTBUF_FORMAT("\tesp at PHYS_BASE = %p", if_->esp);
   
   void *esp_start = if_->esp;
   void *arg_ptrs[arg->c];
 
+  int index = 0;
   /* Push arguments on the stack */
-  for (int i = arg->c - 1; i >= 0; i--) {
-    int size;
-    size = strlen(arg->v[i]) + 1;
+  for (int i = 0; i < arg->c; i++) {
+    int size = strlen(arg->v + index) + 1; // Get size of arg
 
-    if_->esp -= sizeof(char) * size;
-    arg_ptrs[i] = if_->esp;
-
-    strlcpy(if_->esp, arg->v[i], size);
+    if_->esp -= size; // Decrease esp to make room to save arg
+    strlcpy(if_->esp, arg->v + index, size); // Copy arg string onto stack
+    arg_ptrs[i] = if_->esp; // Save ptr to arg
     
     PUTBUF_FORMAT("\tmoved stack down by %d. pushed %s onto stack at %p", 
-      sizeof(char) * size, arg->v[i], if_->esp);
+      sizeof(char) * size, arg->v + index, if_->esp);
     HEX_DUMP_ESP(if_->esp);
+
+    index += size; // Continue to next string in arg->v
   }
 
   /* Word align esp */
@@ -144,32 +143,33 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   PUTBUF_FORMAT("\tmoved stack down by %d for word alignment. now at %p",
     alignment, if_->esp - alignment);
   
-  if_->esp -= alignment;
+  if_->esp -= alignment; //Decrease by alignment
   HEX_DUMP_ESP(if_->esp);
 
   /* Push a null pointer sentinel on the stack */
   PUSH_ESP(NULL, void *);
 
-  PUTBUF_FORMAT("\tmoved stack down by %d. pushed NULL sentinel onto stack at %p", 
+  PUTBUF_FORMAT("\tmoved stack down by %d. "
+    "pushed NULL sentinel onto stack at %p", 
     sizeof(NULL), if_->esp);
   HEX_DUMP_ESP(if_->esp);
  
   /* Push pointers to arguments on the stack */
   for (int i = arg->c - 1; i >= 0; i--) {
-    PUSH_ESP(arg_ptrs[i], void *);
+    PUSH_ESP(arg_ptrs[i], void *); // Push saved pointer onto stack
     
-    PUTBUF_FORMAT("\tmoved stack down by %d. pushed pointer = %p to arg[%d] onto stack at %p", 
+    PUTBUF_FORMAT("\tmoved stack down by %d. "
+      "pushed pointer = %p to arg[%d] onto stack at %p", 
       sizeof(void *), arg_ptrs[i], i, if_->esp);
     HEX_DUMP_ESP(if_->esp);
   }
 
   /* Push first pointer on the stack */
-  // if_->esp -= sizeof(void *);
   PUTBUF_FORMAT("\tmoved stack down by %d. "
     "pushed first pointer = %p onto stack at %p", 
     sizeof(void*), if_->esp + sizeof(void *), if_->esp);
 
-  PUSH_ESP(if_->esp + WORD_SIZE, void *);
+  PUSH_ESP(if_->esp + WORD_SIZE, void *); // Last pushed ptr is WORD_SIZE above
   HEX_DUMP_ESP(if_->esp);
 
   /* Push the number of arguments on the stack */
