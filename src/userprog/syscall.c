@@ -1,22 +1,23 @@
-#include "userprog/syscall.h"
-#include "lib/user/syscall.h"
-#include <stdio.h>
 #include <syscall-nr.h>
-#include "threads/interrupt.h"
+#include <string.h>
+#include <stdio.h>
+#include "lib/user/syscall.h"
+#include "userprog/syscall.h"
+#include "userprog/process.h"
+#include "userprog/pagedir.h"
+#include "userprog/debug.h"
+#include "devices/timer.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
-#include "devices/timer.h"
 #include "devices/shutdown.h"
-#include "userprog/pagedir.h"
+#include "threads/interrupt.h"
 #include "threads/vaddr.h"
-#include <string.h>
-#include "debug.h"
 
 #define MAX_SIZE 100
+#define POP_ESP(type, esp) (*((type *) check_pointer(esp)))
 
 static void syscall_handler (struct intr_frame *);
 static int get_num_args(int syscall_num);
-static void *check_pointer(void *ptr);
 
 void
 syscall_init (void) 
@@ -30,20 +31,12 @@ syscall_handler (struct intr_frame *f)
   PUTBUF("Start syscall:");
   HEX_DUMP_ESP(f->esp);  
 
-  int syscall_num = *((int *) check_pointer(f->esp));
+  int syscall_num = POP_ESP(int, f->esp);
   PUTBUF_FORMAT("\tpopped syscall num = %d off at %p. moved stack up by %d", 
     syscall_num, f->esp, sizeof(int *)); 
 
   int num_args = get_num_args(syscall_num);
   PUTBUF_FORMAT("\tsyscall has %d args", num_args); 
-  
-  PUTBUF("Pop args:");
-  void *args[3];
-  for (int i = 0; i < num_args; i++) {
-    args[i] = check_pointer(f->esp + sizeof(int *) + (i * sizeof(void *)));
-
-    PUTBUF_FORMAT("\targ[%d] at %p", i, args[i]);
-  }
 
   switch (syscall_num) {
     case SYS_HALT:
@@ -51,22 +44,19 @@ syscall_handler (struct intr_frame *f)
       break;
 
     case SYS_EXIT:
-      PUTBUF("Call exit()");
-      int status = *((int *) args[0]);
-      exit(status);
+      exit(POP_ESP(int, f->esp + WORD_SIZE));
       break;
 
     case SYS_WAIT:
       PUTBUF("Call wait()");
-      pid_t pid = *((pid_t *) args[0]);
-      f->eax = wait(pid);
+      f->eax = wait(POP_ESP(pid_t, f->esp + WORD_SIZE));
       break;
 
     case SYS_WRITE:
       PUTBUF("Call write()");
-      int fd = *((int*) args[0]);
-      void *buff = *((void **) args[1]);
-      unsigned size = *((unsigned *) args[2]);
+      int fd = POP_ESP(int, f->esp + WORD_SIZE);
+      void *buff = POP_ESP(void *, f->esp + (2 * WORD_SIZE));
+      unsigned size = POP_ESP(unsigned, f->esp + (3 * WORD_SIZE));
       f->eax = write(fd, buff, size);
       break;
   }
@@ -85,12 +75,7 @@ void *check_pointer(void *ptr) {
 }
 
 int wait(pid_t pid UNUSED) {
-  // while (true) {
-  //   barrier();
-  // }
-
-  timer_sleep(600);
-  return -1;
+  return process_wait(pid);
 }
 
 void halt() {
@@ -101,10 +86,10 @@ void exit(int status) {
   struct thread *thread = thread_current();
   thread->exit_code = status;
   
-  char buf[MAX_SIZE]; 
-  int cnt;
+  char buf[MAX_SIZE]; int cnt;
+  cnt = snprintf(buf, MAX_SIZE, 
+    "%s: exit(%d)\n", thread->name, thread->exit_code);
   
-  cnt = snprintf(buf, MAX_SIZE, "%s: exit(%d)\n", thread->name, thread->exit_code);
   write(1, buf, cnt);
   thread_exit();
 }

@@ -18,6 +18,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "lib/user/syscall.h"
+#include "devices/timer.h"
 #include "debug.h"
 
 #define PUSH_ESP(val, type) \
@@ -204,7 +205,8 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
 int
 process_wait (tid_t child_tid) 
 {
-  return wait((pid_t) child_tid);
+  timer_sleep(600);
+  return child_tid;
 }
 
 /* Free the current process's resources. */
