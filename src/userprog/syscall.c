@@ -64,12 +64,9 @@ initialised because the file hasn't been opened yet. */
 void make_file_info(struct file_info *info, char name[MAX_FILENAME_SIZE]) {
   struct list fds;
   list_init(&fds);
-  PUTBUF("NAME DOESN'T WORK");
   info->name = name;
-  PUTBUF("NAME DOES WORK");
   info->to_remove = false;
   info->is_open = false;
-  PUTBUF("open is false");
   info->fds = &fds;
 }
 
@@ -236,16 +233,12 @@ void *check_pointer(void *ptr) {
 void *traverse_all_files(void *func, void *aux) {
   struct list_elem *curr;
   infoFunc funct = (infoFunc) func;
-  PUTBUF("REACHED OUTSIDE APPLY");
   if(list_empty(&all_files)) {
-    PUTBUF("teejee");
   }
   if(!list_empty(&all_files)) {
     for (curr = list_begin(&all_files); 
        curr != list_end(&all_files); curr = list_next(curr)) {
-      PUTBUF("WE'RE INSIDE BABY");
       void *result = funct(curr, aux);
-      PUTBUF_FORMAT("RESULT: %p", result);
       if (result != NULL) {
         return result;
       }
@@ -409,7 +402,7 @@ int open(const char *file_name) {
 
   struct thread_fd_elem t_elem = {.fd = elem.fd};
   list_push_back(thread_current()->fds, &(t_elem.fd_e));
-  
+
   return elem.fd;
 }
 
@@ -527,11 +520,13 @@ void rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem) {
 
 /* Returns the thread_fd_elem struct with the specified fd */
 struct thread_fd_elem *find_fd_elem(int fd) {
-  for (struct list_elem *curr = list_begin(thread_current()->fds); 
-       curr != list_end(thread_current()->fds); curr = list_next(curr)) {
-    struct thread_fd_elem *elem = list_entry(curr, struct thread_fd_elem, fd_e);
-    if (fd == elem->fd) {
-      return elem;
+  if (!list_empty(thread_current()->fds)) {
+    for (struct list_elem *curr = list_begin(thread_current()->fds); 
+         curr != list_tail(thread_current()->fds); curr = list_next(curr)) {
+      struct thread_fd_elem *elem = list_entry(curr, struct thread_fd_elem, fd_e);
+      if (fd == elem->fd) {
+        return elem;
+      }
     }
   }
   return NULL;

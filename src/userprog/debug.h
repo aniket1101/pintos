@@ -1,8 +1,8 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
-// #define __DEBUG__
-// #define __HEX_DUMP__
+#define __DEBUG__
+#define __HEX_DUMP__
 
 #ifdef __DEBUG__ 
   #define PUTBUF_FORMAT(format, ...) ({\
