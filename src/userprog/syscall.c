@@ -17,6 +17,8 @@
 #include "devices/shutdown.h"
 #include "process.h"
 #include "devices/input.h"
+#include "threads/malloc.h"
+
 
 #define MAX_SIZE 100
 #define MAX_FILENAME_SIZE 14
@@ -41,8 +43,8 @@ void rem_fd(struct list_elem *, struct list_elem *);
 void remove_fd(int);
 void init_file_info(struct file_info *, int, struct file *);
 void *fd_apply(int *, void *);
-void *inside_apply(struct list_elem *, void *);
-void *outside_apply(void *, void *);
+void *traverse_fds(struct list_elem *, void *);
+void *traverse_all_files(void *, void *);
 struct file_info *find_file_info(const char *);
 void make_file_info(struct file_info *, char name[MAX_FILENAME_SIZE]);
 struct thread_fd_elem *find_fd_elem(int);
@@ -62,9 +64,12 @@ initialised because the file hasn't been opened yet. */
 void make_file_info(struct file_info *info, char name[MAX_FILENAME_SIZE]) {
   struct list fds;
   list_init(&fds);
+  PUTBUF("NAME DOESN'T WORK");
   info->name = name;
+  PUTBUF("NAME DOES WORK");
   info->to_remove = false;
   info->is_open = false;
+  PUTBUF("open is false");
   info->fds = &fds;
 }
 
@@ -228,25 +233,35 @@ void *check_pointer(void *ptr) {
   exit(-1);
 }
 
-void *outside_apply(void *func, void *aux) {
+void *traverse_all_files(void *func, void *aux) {
   struct list_elem *curr;
   infoFunc funct = (infoFunc) func;
-
-  for (curr = list_begin(&all_files); 
+  PUTBUF("REACHED OUTSIDE APPLY");
+  if(list_empty(&all_files)) {
+    PUTBUF("teejee");
+  }
+  if(!list_empty(&all_files)) {
+    for (curr = list_begin(&all_files); 
        curr != list_end(&all_files); curr = list_next(curr)) {
-    if (funct(curr, aux) != NULL) {
-      break;
+      PUTBUF("WE'RE INSIDE BABY");
+      void *result = funct(curr, aux);
+      PUTBUF_FORMAT("RESULT: %p", result);
+      if (result != NULL) {
+        return result;
+      }
     }
   }
+
   return NULL;
 }
 
 void *fd_apply(int *fd, void *func) {
   void *aux[2] = {fd, func};
-  return outside_apply(&inside_apply, aux);
+  return traverse_all_files
+(&traverse_fds, aux);
 }
 
-void *inside_apply(struct list_elem *curr, void *aux) {
+void *traverse_fds(struct list_elem *curr, void *aux) {
   struct file_info *info = list_entry(curr, struct file_info, elem);
   struct list_elem *elem;
   int fd = *((int *) (aux)); 
@@ -342,7 +357,7 @@ bool remove (const char *file) {
 
 /* Returns the file_info struct of the file with the specified name */
 struct file_info *find_file_info(const char *file) {
-  return outside_apply(&get_file_info, (char *) file);
+  return traverse_all_files(&get_file_info, (char *) file);
 }
 
 /* Helper for find_file_info. Checks the name of file_info struct and returns
@@ -360,18 +375,41 @@ struct file_info *get_file_info(struct list_elem *element, void *aux) {
 int open(const char *file_name) {
   // Get lock to modify all_files
   // lock_acquire(fd_lock);
+
+  if (file_name == NULL ) {
+    exit(-1);
+  } else if (!strcmp(file_name, "")) {
+    return -1;
+  }
+
   struct file_info *info = find_file_info(file_name);
+  
+  // File has not been created
+  if(info == NULL) {
+    struct file_info new_info;
+    struct file *file = filesys_open(file_name);
+    if (file == NULL) {
+      return -1;
+    }
+    // Need to have file in our list
+    make_file_info(&new_info, (char *) file_name);
+    new_info.file = file;
+    new_info.is_open = true;
+    info = &new_info;
+  } 
+
   if (!info->is_open) {
     info->file = filesys_open(file_name);
     info->is_open = true;
   }  
+
   struct fd_elem elem;
   init_fd_elem(&elem);
   list_push_back(info->fds, &(elem.fd_e));
+
   struct thread_fd_elem t_elem = {.fd = elem.fd};
   list_push_back(thread_current()->fds, &(t_elem.fd_e));
-
-  // lock_release(fd_lock);
+  
   return elem.fd;
 }
 
