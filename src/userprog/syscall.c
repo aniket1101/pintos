@@ -233,11 +233,10 @@ void *check_pointer(void *ptr) {
 void *traverse_all_files(void *func, void *aux) {
   struct list_elem *curr;
   infoFunc funct = (infoFunc) func;
-  if(list_empty(&all_files)) {
-  }
+
   if(!list_empty(&all_files)) {
     for (curr = list_begin(&all_files); 
-       curr != list_end(&all_files); curr = list_next(curr)) {
+       curr != list_tail(&all_files); curr = list_next(curr)) {
       void *result = funct(curr, aux);
       if (result != NULL) {
         return result;
@@ -259,16 +258,19 @@ void *traverse_fds(struct list_elem *curr, void *aux) {
   struct list_elem *elem;
   int fd = *((int *) (aux)); 
   elemFunc func = (elemFunc) (aux + sizeof(int)); 
+  
+  if (!list_empty(info->fds)) {
+    for (elem = list_begin(info->fds); 
+        elem != list_tail(info->fds); elem = list_next(elem)) {
+      struct fd_elem *fd_el = list_entry(elem, struct fd_elem, fd_e);
 
-  for (elem = list_begin(info->fds); 
-      elem != list_end(info->fds); elem = list_next(elem)) {
-    struct fd_elem *fd_el = list_entry(elem, struct fd_elem, fd_e);
+      if (fd == fd_el->fd) {
+        return func(curr, elem);
+      }
 
-    if (fd == fd_el->fd) {
-      return func(curr, elem);
     }
-
   }
+
   return NULL;
 }
 
