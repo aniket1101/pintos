@@ -25,8 +25,8 @@ typedef void * (*elemFunc) (struct list_elem *, struct list_elem *);
 typedef void * (*infoFunc) (struct list_elem *, void *);
 
 static void syscall_handler (struct intr_frame *);
-static int get_num_args(int syscall_num);
-static void *check_pointer(void *ptr);
+static int get_num_args(int);
+static void *check_pointer(void *);
 
 struct file_info {
 	struct list *fds;
@@ -37,29 +37,28 @@ struct file_info {
 	struct list_elem elem;
 };
 
-void rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem);
-void remove_fd(int fd);
-void init_file_info(struct file_info *info, int fd, struct file *file);
-void *fd_apply(int *fd, void *func);
-void *inside_apply(struct list_elem *curr, void *aux);
-void *outside_apply(void *func, void *aux);
-struct file_info *find_file_info(const char *file);
-void make_file_info(struct file_info *info, char name[MAX_FILENAME_SIZE]);
-struct thread_fd_elem *find_fd_elem(int fd);
-bool is_fd_valid(int fd);
-void init_fd_elem(struct fd_elem *elem);
-struct file_info *fd_to_file_info (int fd);
-struct file *fd_to_file(int fd);
-struct file_info *get_info_file(struct list_elem *file_elem, struct list_elem fd_elem UNUSED);
-struct file_info *get_file_info(struct list_elem *elem, void *aux);
-// struct open_file * get_open_file(int fd);
+void rem_fd(struct list_elem *, struct list_elem *);
+void remove_fd(int);
+void init_file_info(struct file_info *, int, struct file *);
+void *fd_apply(int *, void *);
+void *inside_apply(struct list_elem *, void *);
+void *outside_apply(void *, void *);
+struct file_info *find_file_info(const char *);
+void make_file_info(struct file_info *, char name[MAX_FILENAME_SIZE]);
+struct thread_fd_elem *find_fd_elem(int);
+bool is_fd_valid(int);
+void init_fd_elem(struct fd_elem *);
+struct file_info *fd_to_file_info (int);
+struct file *fd_to_file(int);
+struct file_info *get_info_file(struct list_elem *, struct list_elem * UNUSED);
+struct file_info *get_file_info(struct list_elem *, void *);
 
 static struct list all_files;
 
 static int32_t next_fd;
 
-// static struct lock *fd_lock;
-
+/* Sets up file_info struct when a file is created. Many fields aren't
+initialised because the file hasn't been opened yet. */
 void make_file_info(struct file_info *info, char name[MAX_FILENAME_SIZE]) {
   struct list fds;
   list_init(&fds);
@@ -69,21 +68,24 @@ void make_file_info(struct file_info *info, char name[MAX_FILENAME_SIZE]) {
   info->fds = &fds;
 }
 
+/* Initialises an fd_elem struct */
 void init_fd_elem(struct fd_elem *elem) {
   elem->offset = 0;
   elem->fd = next_fd;
   next_fd++;
 }
-// void init_file_info(struct file_info *info, int fd, struct file *file) {
-//   struct list fds;
-//   list_init(&fds);
-//   struct fd_elem el;
-//   el.fd = fd;
-//   list_push_back(&fds, &(el.fd_e));
-//   info->fds = &fds;
-//   info->to_remove = false;
-//   info->file = file;
-// }
+
+/* Initialises the rest of file_info fields when a file is opened */
+void init_file_info(struct file_info *info, int fd, struct file *file) {
+  struct list fds;
+  list_init(&fds);
+  struct fd_elem el;
+  el.fd = fd;
+  list_push_back(&fds, &(el.fd_e));
+  info->fds = &fds;
+  info->to_remove = false;
+  info->file = file;
+}
 
 void
 syscall_init (void) 
@@ -145,6 +147,7 @@ syscall_handler (struct intr_frame *f)
   PUTBUF("End syscall");
 }
 
+/* Checks whether the pointer is valid */
 void *check_pointer(void *ptr) {
   if (ptr != NULL && is_user_vaddr(ptr) 
       && pagedir_get_page(thread_current()->pagedir, ptr)) {
@@ -190,10 +193,14 @@ void *inside_apply(struct list_elem *curr, void *aux) {
   return NULL;
 }
 
+/* Implements the halt system call */
 void halt() {
   shutdown_power_off();
 }
 
+/* Implements the exit system call by:
+- Setting the thread's exit code to the status
+- Outputting a message with the exit code to the terminal */
 void exit(int status) {
   struct thread *thread = thread_current();
   thread->exit_code = status;
@@ -228,6 +235,10 @@ int wait(pid_t pid UNUSED) {
   return -1;
 }
 
+/* Implements the create system call by:
+- Checking that the name is valid
+- Makes a file_info struct for the new file
+- Adding the struct to the list of files */
 bool create (const char *file, unsigned initial_size) {
   if(file != NULL && strlen(file) <= MAX_FILENAME_SIZE && filesys_create(file, initial_size)) {
     struct file_info info;
@@ -237,6 +248,10 @@ bool create (const char *file, unsigned initial_size) {
   return false;
 }
 
+/* Implements the remove system call by:
+- Getting the file_info struct of the file with the specified name
+- Sets to_remove to true
+- Deletes the file if the file is closed */
 bool remove (const char *file) {
   struct file_info *info = find_file_info(file);
   info->to_remove = true;
@@ -246,10 +261,13 @@ bool remove (const char *file) {
   return false;
 }
 
+/* Returns the file_info struct of the file with the specified name */
 struct file_info *find_file_info(const char *file) {
   return outside_apply(&get_file_info, (char *) file);
 }
 
+/* Helper for find_file_info. Checks the name of file_info struct and returns
+it if the file has the right name */
 struct file_info *get_file_info(struct list_elem *element, void *aux) {
   struct file_info *info = list_entry(element, struct file_info, elem);
   char *file = (char *) aux;
@@ -278,6 +296,8 @@ int open(const char *file_name) {
   return elem.fd;
 }
 
+/* Implements the filesize system call by calculating the size of the file with
+the specified fd */
 int filesize(int fd) {
   if (is_fd_valid(fd)) {
     return file_length(fd_to_file(fd));
@@ -300,21 +320,18 @@ int read(int fd, void *buffer, unsigned size) {
 }
 
 // TODO
-int write(int fd, const void *buffer, unsigned size) {
-  if (is_fd_valid(fd)) {  
-    if (fd == STDOUT_FILENO) {
-      // Write buffer to console
-      putbuf((const char *) buffer, size);
-    } else {
-      // Write buffer to file, checking how many bytes can be written to
-      // return file_write(get_open_file(fd)->file, buffer, size);
-    }
-    return size;
+int write(int fd, const void *buffer, unsigned size) { 
+  if (fd == STDOUT_FILENO) {
+    // Write buffer to console
+    putbuf((const char *) buffer, size);
   } else {
-    exit(-1);
+    // Write buffer to file, checking how many bytes can be written to
+    // return file_write(get_open_file(fd)->file, buffer, size);
   }
+  return size;
 }
 
+/* Implements the seek system call by changing the file's position */
 void seek(int fd, unsigned position) {
   if (is_fd_valid(fd)) {
     file_seek(fd_to_file(fd), position);
@@ -323,6 +340,7 @@ void seek(int fd, unsigned position) {
   }
 }
 
+/* Implements the tell system call by returning the file's position */
 unsigned tell(int fd) {
   if (is_fd_valid(fd)) {
     return file_tell(fd_to_file(fd));
@@ -331,6 +349,10 @@ unsigned tell(int fd) {
   }
 }
 
+/* Implements the close system call by:
+- Removing the fd from the file's list of possible fds
+- Sets is_open to false
+- Removes the file if it was removed by another thread */
 void close(int fd) {
   // lock_acquire(fd_lock);
   if (is_fd_valid(fd)) {
@@ -348,27 +370,36 @@ void close(int fd) {
   }
 }
 
+/* Returns the file_info struct of the file with the specified fd */
 struct file_info *fd_to_file_info (int fd) {
   return (struct file_info *) fd_apply(&fd, &get_info_file);
 }
 
+/* Returns the file struct of the file with the specified fd */
 struct file *fd_to_file(int fd) {
   return fd_to_file_info(fd)->file;
 }
 
-struct file_info *get_info_file(struct list_elem *file_elem, struct list_elem fd_elem UNUSED) {
+/* Helper for fd_to_fie_info. Returns the outer file_info struct from the 
+list_element struct */
+struct file_info *get_info_file(struct list_elem *file_elem, struct list_elem *fd_elem UNUSED) {
   return list_entry(file_elem, struct file_info, elem);
 }
 
+/* Checks whether the current thread has access to the specified fd */
 bool is_fd_valid(int fd) {
   return find_fd_elem(fd) != NULL;
 }
 
+/* Removes an fd from the file's possible fds and from the current threads' list
+of fds */
 void remove_fd(int fd) {
   fd_apply(&fd, &rem_fd);
   list_remove(&(find_fd_elem(fd)->fd_e));
 }
 
+/* Helper for remove_fd. Removes an fd from the file's possible fds and removes
+the file if necessary */
 void rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem) {
   struct file_info *info = list_entry(file_elem, struct file_info, elem);
   list_remove(fd_elem);
@@ -377,6 +408,7 @@ void rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem) {
   }
 }
 
+/* Returns the thread_fd_elem struct with the specified fd */
 struct thread_fd_elem *find_fd_elem(int fd) {
   for (struct list_elem *curr = list_begin(thread_current()->fds); 
        curr != list_end(thread_current()->fds); curr = list_next(curr)) {
@@ -388,6 +420,7 @@ struct thread_fd_elem *find_fd_elem(int fd) {
   return NULL;
 }
 
+/* Returns the number of arguments the specified system call needs */
 int get_num_args(int syscall_num) {
   switch (syscall_num) {
     case SYS_HALT:
