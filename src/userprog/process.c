@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <user/syscall.h>
 #include "userprog/process.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
@@ -17,7 +18,7 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "lib/user/syscall.h"
+#include "devices/timer.h"
 #include "debug.h"
 
 #define PUSH_ESP(val, type) \
@@ -118,7 +119,6 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   PUTBUF("Push args onto stack:");
   PUTBUF_FORMAT("\tesp at PHYS_BASE = %p", if_->esp);
   
-  void *esp_start = if_->esp;
   void *arg_ptrs[arg->c];
 
   int index = 0;
@@ -187,7 +187,7 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   HEX_DUMP_ESP(if_->esp);
   PUTBUF_FORMAT("\tesp at %p", if_->esp);
 
-  if (if_->esp < esp_start - PGSIZE) {
+  if (if_->esp < PHYS_BASE - PGSIZE) { // Stack overflow has occurred
     exit(-1);
   }
 }
