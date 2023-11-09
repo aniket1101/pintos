@@ -1,7 +1,7 @@
 #include <syscall-nr.h>
 #include <string.h>
 #include <stdio.h>
-#include "lib/user/syscall.h"
+#include <user/syscall.h>
 #include "userprog/syscall.h"
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
@@ -14,36 +14,44 @@
 #include "threads/vaddr.h"
 
 #define MAX_SIZE 100
-#define POP_STACK(type, esp) (*((type *) check_pointer(esp)))
-#define POP_STACK_ARG(type, argnum) POP_STACK(type, f->esp + ((argnum + 1) * WORD_SIZE))
 
-#define handle0(func) ({\
-  func();\
-  })
+#define pop_stack(esp, type) *((type *) check_pointer(esp))
+#define pop_arg(argnum, type) pop_stack(f->esp + ((argnum + 1) * WORD_SIZE), type)
 
-#define handle1(func, type1) ({\
-  type1 a = POP_STACK_ARG(type1, 0);\
-  func(a);\
-  })
-
-#define handle2(func, type1, type2) ({\
-  type1 a = POP_STACK_ARG(type1, 0);\
-  type2 b = POP_STACK_ARG(type2, 1);\
-  func(a, b);\
-  })
-
-#define handle3(func, type1, type2, type3) ({\
-  type1 a = POP_STACK_ARG(type1, 0);\
-  type2 b = POP_STACK_ARG(type2, 1);\
-  type3 c = POP_STACK_ARG(type3, 2);\
-  func(a, b, c);\
-  })
+#define NUM_SYSCALLS 13
 
 static void syscall_handler (struct intr_frame *);
-static void call1(int syscall_num, struct intr_frame *f);
-static void call2(int syscall_num, struct intr_frame *f);
-static void call3(int syscall_num, struct intr_frame *f);
-static int get_num_args(int syscall_num);
+
+static void syscall_halt(struct intr_frame *f);
+static void syscall_exit(struct intr_frame *f);
+static void syscall_exec(struct intr_frame *f);
+static void syscall_wait(struct intr_frame *f);
+static void syscall_create(struct intr_frame *f);
+static void syscall_remove(struct intr_frame *f);
+static void syscall_open(struct intr_frame *f);
+static void syscall_filesize(struct intr_frame *f);
+static void syscall_read(struct intr_frame *f);
+static void syscall_write(struct intr_frame *f);
+static void syscall_seek(struct intr_frame *f);
+static void syscall_tell(struct intr_frame *f);
+static void syscall_close(struct intr_frame *f);
+
+typedef void (*syscall_func)(struct intr_frame *f); 
+syscall_func syscalls[NUM_SYSCALLS] = {
+  &syscall_halt, 
+  &syscall_exit, 
+  &syscall_exec, 
+  &syscall_wait, 
+  &syscall_create,
+  &syscall_remove, 
+  &syscall_open, 
+  &syscall_filesize, 
+  &syscall_read, 
+  &syscall_write, 
+  &syscall_seek, 
+  &syscall_tell, 
+  &syscall_close
+}; 
 
 void
 syscall_init (void) 
@@ -51,57 +59,28 @@ syscall_init (void)
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
-typedef void (*call_func)(int syscall_num, struct intr_frame *f);
-
 static void
 syscall_handler (struct intr_frame *f) 
 {
   PUTBUF("Start syscall:");
   HEX_DUMP_ESP(f->esp);  
 
-  int syscall_num = POP_STACK(int, f->esp);
+  int syscall_num = pop_stack(f->esp, int);
   PUTBUF_FORMAT("\tpopped syscall num = %d off at %p. moved stack up by %d", 
     syscall_num, f->esp, sizeof(int *)); 
 
-  call_func call;
-  
-  switch (syscall_num) {
-    case SYS_HALT:
-      PUTBUF("Call halt()");
-      handle0(halt);
+  if (syscall_num < 0 || syscall_num >= NUM_SYSCALLS) {
+    exit(-1);
+  } 
 
-    case SYS_EXIT:
-    case SYS_EXEC:
-    case SYS_WAIT:
-    case SYS_REMOVE:
-    case SYS_OPEN:
-    case SYS_FILESIZE:
-    case SYS_TELL:
-    case SYS_CLOSE:
-      call = &call1;
-      break;
-
-    case SYS_CREATE:
-    case SYS_SEEK:
-      call = &call2;
-      break;
-
-    case SYS_WRITE:
-      call = &call3;
-      break;
-
-    default:
-      exit(-1);
-  }
-
-  call(syscall_num, f);
+  syscalls[syscall_num](f);
 
   HEX_DUMP_ESP(f->esp);
   PUTBUF("End syscall");
 }
 
 void *check_pointer(void *ptr) {
-  if (ptr != NULL && is_user_vaddr(ptr) 
+  if (is_user_vaddr(ptr) 
       && pagedir_get_page(thread_current()->pagedir, ptr)) {
     return ptr;
   } 
@@ -109,88 +88,78 @@ void *check_pointer(void *ptr) {
   exit(-1);
 }
 
-static void call1(int syscall_num, struct intr_frame *f) {
-  switch (syscall_num) {
-    case SYS_EXIT:
-      PUTBUF("Call exit()");
-      handle1(exit, int);
-      break;
-
-    case SYS_WAIT:
-      PUTBUF("Call wait()");
-      f->eax = handle1(wait, pid_t);
-      break;
-  }
-}
-
-static void call2(int syscall_num, struct intr_frame *f) {
-  switch (syscall_num) {
-  }
-}
-
-static void call3(int syscall_num, struct intr_frame *f) {
-  switch (syscall_num) {
-    case SYS_WRITE:
-      PUTBUF("Call write()");
-      f->eax = handle3(write, int, void *, unsigned);
-      break;
-  }
-}
-
-void halt() {
+static void syscall_halt(struct intr_frame *f UNUSED) {
+  PUTBUF("Call halt syscall");
   shutdown_power_off();
 }
 
+static void syscall_exit(struct intr_frame *f) {
+  PUTBUF("Call exit syscall");
+  thread_current()->exit_code = pop_arg(0, int);
+  exit(thread_current()->exit_code);
+}
+
 void exit(int status) {
-  struct thread *thread = thread_current();
-  thread->exit_code = status;
-  
   char buf[MAX_SIZE]; int cnt;
-  cnt = snprintf(buf, MAX_SIZE, 
-    "%s: exit(%d)\n", thread->name, thread->exit_code);
-  
-  write(1, buf, cnt);
+  cnt = snprintf(buf, MAX_SIZE, "%s: exit(%d)\n", 
+    thread_current()->name, status);
+  putbuf(buf, cnt);
+
+  process_exit();
   thread_exit();
 }
 
-int wait(pid_t pid UNUSED) {
-  return process_wait(pid);
+static void syscall_exec(struct intr_frame *f UNUSED) {
+  PUTBUF("Call exec syscall");
 }
 
-int write(int fd, const void *buffer, unsigned size) {
+static void syscall_wait(struct intr_frame *f UNUSED) {
+  PUTBUF("Call wait syscall");
+  pid_t pid = pop_arg(0, pid_t);
+  f->eax = process_wait(pid);
+}
+
+static void syscall_create(struct intr_frame *f UNUSED) {
+  PUTBUF("Call create syscall");
+}
+
+static void syscall_remove(struct intr_frame *f UNUSED) {
+  PUTBUF("Call remove syscall");
+}
+
+static void syscall_open(struct intr_frame *f UNUSED) {
+  PUTBUF("Call open syscall");
+}
+
+static void syscall_filesize(struct intr_frame *f UNUSED) {
+  PUTBUF("Call filesize syscall");
+}
+
+static void syscall_read(struct intr_frame *f UNUSED) {
+  PUTBUF("Call read syscall");
+}
+
+static void syscall_write(struct intr_frame *f) {
+  PUTBUF("Call write syscall");
+  int fd = pop_arg(0, int);
+  const void *buffer = pop_arg(1, const void *);
+  unsigned size = pop_arg(2, unsigned);
+  
   if (fd == STDOUT_FILENO) {
     putbuf((const char *) buffer, size);
   }
   
-  return size;
+  f->eax = size;
 }
 
-int get_num_args(int syscall_num) {
-  switch (syscall_num) {
-    case SYS_HALT:
-      return 0;
-    case SYS_EXIT:
-    case SYS_EXEC:
-    case SYS_WAIT:
-    case SYS_REMOVE:
-    case SYS_OPEN:
-    case SYS_FILESIZE:
-    case SYS_TELL:
-    case SYS_CLOSE:
-    case SYS_MUNMAP:
-    case SYS_MKDIR:
-    case SYS_ISDIR:
-    case SYS_INUMBER:
-      return 1;
-    case SYS_CREATE:
-    case SYS_SEEK:
-    case SYS_MMAP:
-    case SYS_READDIR:
-      return 2;
-    case SYS_READ:
-    case SYS_WRITE:
-      return 3;
-    default:
-      exit(-1);
-  }
+static void syscall_seek(struct intr_frame *f UNUSED) {
+  PUTBUF("Call seek syscall");
+}
+
+static void syscall_tell(struct intr_frame *f UNUSED) {
+  PUTBUF("Call tell syscall");
+}
+
+static void syscall_close(struct intr_frame *f UNUSED) {
+  PUTBUF("Call close syscall");
 }
