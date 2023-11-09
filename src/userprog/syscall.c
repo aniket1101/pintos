@@ -100,7 +100,7 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   PUTBUF("Start syscall:");
-  HEX_DUMP_ESP(f->esp);  
+  // HEX_DUMP_ESP(f->esp);  
 
   int syscall_num = *((int *) check_pointer(f->esp));
   PUTBUF_FORMAT("\tpopped syscall num = %d off at %p. moved stack up by %d", 
@@ -124,33 +124,104 @@ syscall_handler (struct intr_frame *f)
 
     case SYS_EXIT:
       PUTBUF("Call exit()");
-      int status = *((int *) args[0]);
-      exit(status);
+      int exit_status = *((int *) args[0]);
+      exit(exit_status);
       break;
+
+    // case SYS_EXEC:
+    //   break;
 
     case SYS_WAIT:
       PUTBUF("Call wait()");
-      pid_t pid = *((pid_t *) args[0]);
-      f->eax = wait(pid);
+      pid_t wait_pid = *((pid_t *) args[0]);
+      f->eax = wait(wait_pid);
       break;
+
+    case SYS_REMOVE:
+      PUTBUF("Call remove()");
+      char *remove_name = *((char **) args[0]);
+      f->eax = remove(remove_name);
+      break;
+
+    case SYS_OPEN:
+      PUTBUF("Call open()");
+      const char *open_file_name = *((const char **) args[0]);
+      f->eax = open(open_file_name);
+      break;
+
+    case SYS_FILESIZE:
+      PUTBUF("Call filesize()");
+      int filesize_fd = *((int *) args[0]);
+      f->eax = filesize(filesize_fd);
+      break;
+
+    case SYS_TELL:
+      PUTBUF("Call tell()");
+      int tell_fd = *((int *) args[0]);
+      f->eax = tell(tell_fd);
+      break;
+
+    case SYS_CLOSE:
+      PUTBUF("Call close()");
+      int close_fd = *((int *) args[0]);
+      close(close_fd);
+      break;
+
+    // case SYS_MUNMAP:
+    //   break;
+
+    // case SYS_MKDIR:
+    //   break;
+
+    // case SYS_ISDIR:
+    //   break;
+
+    // case SYS_INUMBER:
+    //   break;
+
+    case SYS_CREATE:
+      PUTBUF("Call create()");
+      const char *create_name = *((const char **) args[0]);
+      unsigned create_size = *((unsigned *) args[1]);
+      f->eax = create(create_name, create_size);
+      break;
+
+    case SYS_SEEK:
+      PUTBUF("Call seek()");
+      int seek_fd = *((int *) args[0]);
+      unsigned seek_position = *((unsigned *) args[1]);
+      seek(seek_fd, seek_position);
+      break;
+
+    // case SYS_MMAP:
+    //   break;
+
+    // case SYS_READDIR:
+    //   break;
+
+    // case SYS_READ:
+    //   break; 
 
     case SYS_WRITE:
       PUTBUF("Call write()");
-      int fd = *((int*) args[0]);
-      void *buff = *((void **) args[1]);
-      unsigned size = *((unsigned *) args[2]);
-      f->eax = write(fd, buff, size);
+      int write_fd = *((int*) args[0]);
+      void *write_buff = *((void **) args[1]);
+      unsigned write_size = *((unsigned *) args[2]);
+      f->eax = write(write_fd, write_buff, write_size);
       break;
+
+    default:
+      exit(-1);
   }
 
-  HEX_DUMP_ESP(f->esp);
+  // HEX_DUMP_ESP(f->esp);
   PUTBUF("End syscall");
 }
 
 /* Checks whether the pointer is valid */
 void *check_pointer(void *ptr) {
   if (ptr != NULL && is_user_vaddr(ptr) 
-      && pagedir_get_page(thread_current()->pagedir, ptr)) {
+      && pagedir_get_page(thread_current()->pagedir, ptr) != NULL) {
     return ptr;
   } 
 
@@ -240,10 +311,18 @@ int wait(pid_t pid UNUSED) {
 - Makes a file_info struct for the new file
 - Adding the struct to the list of files */
 bool create (const char *file, unsigned initial_size) {
-  if(file != NULL && strlen(file) <= MAX_FILENAME_SIZE && filesys_create(file, initial_size)) {
+
+  if (file == NULL) {
+    exit(-1);
+  }
+
+  bool creates = filesys_create(file, (off_t) initial_size);
+
+  if(strlen(file) <= MAX_FILENAME_SIZE && creates) {
     struct file_info info;
     make_file_info(&info, (char *) file);
     list_push_back(&all_files, &(info.elem));
+    return true;
   }
   return false;
 }

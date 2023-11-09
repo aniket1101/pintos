@@ -131,7 +131,7 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
     
     PUTBUF_FORMAT("\tmoved stack down by %d. pushed %s onto stack at %p", 
       sizeof(char) * size, arg->v[i], if_->esp);
-    HEX_DUMP_ESP(if_->esp);
+    // HEX_DUMP_ESP(if_->esp);
   }
 
   /* Word align esp */
@@ -141,7 +141,7 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
     alignment, if_->esp - alignment);
   
   if_->esp -= alignment;
-  HEX_DUMP_ESP(if_->esp);
+  // HEX_DUMP_ESP(if_->esp);
 
   /* Push a null pointer sentinel on the stack */
   if_->esp -= sizeof(void *);
@@ -149,7 +149,7 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
 
   PUTBUF_FORMAT("\tmoved stack down by %d. pushed NULL sentinel onto stack at %p", 
     sizeof(NULL), if_->esp);
-  HEX_DUMP_ESP(if_->esp);
+  // HEX_DUMP_ESP(if_->esp);
  
   /* Push pointers to arguments on the stack */
   for (int i = arg->c - 1; i >= 0; i--) {
@@ -158,7 +158,7 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
     
     PUTBUF_FORMAT("\tmoved stack down by %d. pushed pointer = %p to arg[%d] onto stack at %p", 
       sizeof(void *), arg_ptrs[i], i, if_->esp);
-    HEX_DUMP_ESP(if_->esp);
+    // HEX_DUMP_ESP(if_->esp);
   }
 
   /* Push first pointer on the stack */
@@ -167,7 +167,7 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
     sizeof(void*), if_->esp + sizeof(void *), if_->esp);
 
   *((void**) if_->esp) = if_->esp + sizeof(void *);
-  HEX_DUMP_ESP(if_->esp);
+  // HEX_DUMP_ESP(if_->esp);
 
   /* Push the number of arguments on the stack */
   if_->esp -= sizeof(int);
@@ -175,14 +175,14 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
 
   PUTBUF_FORMAT("\tmoved stack down by %d. pushed argc = %d onto stack at %p", 
     sizeof(int), arg->c, if_->esp);
-  HEX_DUMP_ESP(if_->esp);
+  // HEX_DUMP_ESP(if_->esp);
 
   /* Push a fake return address on the stack */
   if_->esp -= sizeof(void *);
   *((void **) if_->esp) = NULL;
 
   PUTBUF_FORMAT("\tmoved stack down by %d. pushed fake return = %p onto stack at %p", sizeof(void *), NULL, if_->esp);
-  HEX_DUMP_ESP(if_->esp);
+  // HEX_DUMP_ESP(if_->esp);
   PUTBUF_FORMAT("\tesp at %p", if_->esp);
 }
 
