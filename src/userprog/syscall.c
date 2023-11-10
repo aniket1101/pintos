@@ -206,8 +206,13 @@ syscall_handler (struct intr_frame *f)
     // case SYS_READDIR:
     //   break;
 
-    // case SYS_READ:
-    //   break; 
+    case SYS_READ:
+      PUTBUF("Call read()");
+      int read_fd = *((int*) args[0]);
+      void *read_buff = *((void **) args[1]);
+      unsigned read_size = *((unsigned *) args[2]);
+      f->eax = read(read_fd, read_buff, read_size);
+      break;
 
     case SYS_WRITE:
       PUTBUF("Call write()");
@@ -425,15 +430,16 @@ int filesize(int fd) {
 }
 
 int read(int fd, void *buffer, unsigned size) {
-  if (is_fd_valid(fd)) {
-    if (fd == STDIN_FILENO) {
-      return input_getc();
-    } else {
-      return file_read(fd_to_file(fd), buffer, size);
-    }
-  } else {
-    exit(-1);
+  
+  if (fd == STDIN_FILENO) {
+    return input_getc();
   }
+
+  if (check_pointer(buffer) && is_fd_valid(fd)) {
+    return file_read(fd_to_file(fd), buffer, size);
+  }
+  
+  exit(-1);
 }
 
 // TODO
@@ -443,7 +449,10 @@ int write(int fd, const void *buffer, unsigned size) {
     putbuf((const char *) buffer, size);
   } else {
     // Write buffer to file, checking how many bytes can be written to
-    // return file_write(fd_to_file(fd), buffer, size);
+    if (is_fd_valid(fd)) {
+      return file_write(fd_to_file(fd), buffer, size);
+    } 
+    exit(-1);
   }
   return size;
 }
