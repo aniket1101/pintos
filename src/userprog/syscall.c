@@ -236,7 +236,6 @@ void *traverse_all_files(void *func, void *aux) {
   if(!list_empty(&all_files)) {
     for (curr = list_begin(&all_files); 
        curr != list_tail(&all_files); curr = list_next(curr)) {
-      struct file_info *info = list_entry(curr, struct file_info, elem);
       void *result = funct(curr, aux);
       if (result != NULL) {
         return result;
