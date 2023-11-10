@@ -62,12 +62,12 @@ static int32_t next_fd;
 /* Sets up file_info struct when a file is created. Many fields aren't
 initialised because the file hasn't been opened yet. */
 void make_file_info(struct file_info *info, char name[MAX_FILENAME_SIZE]) {
-  struct list fds;
-  list_init(&fds);
+  struct list *fds = (struct list *) malloc(sizeof(struct list));
+  list_init(fds);
   info->name = name;
   info->to_remove = false;
   info->is_open = false;
-  info->fds = &fds;
+  info->fds = fds;
 }
 
 /* Initialises an fd_elem struct */
@@ -233,24 +233,22 @@ void *check_pointer(void *ptr) {
 void *traverse_all_files(void *func, void *aux) {
   struct list_elem *curr;
   infoFunc funct = (infoFunc) func;
-
   if(!list_empty(&all_files)) {
     for (curr = list_begin(&all_files); 
        curr != list_tail(&all_files); curr = list_next(curr)) {
+      struct file_info *info = list_entry(curr, struct file_info, elem);
       void *result = funct(curr, aux);
       if (result != NULL) {
         return result;
       }
     }
   }
-
   return NULL;
 }
 
 void *fd_apply(int *fd, void *func) {
   void *aux[2] = {fd, func};
-  return traverse_all_files
-(&traverse_fds, aux);
+  return traverse_all_files (&traverse_fds, aux);
 }
 
 void *traverse_fds(struct list_elem *curr, void *aux) {
@@ -320,7 +318,7 @@ int wait(pid_t pid UNUSED) {
 - Checking that the name is valid
 - Makes a file_info struct for the new file
 - Adding the struct to the list of files */
-bool create (const char *file, unsigned initial_size) {
+bool create(const char *file, unsigned initial_size) {
 
   if (file == NULL) {
     exit(-1);
@@ -329,9 +327,9 @@ bool create (const char *file, unsigned initial_size) {
   bool creates = filesys_create(file, (off_t) initial_size);
 
   if(strlen(file) <= MAX_FILENAME_SIZE && creates) {
-    struct file_info info;
-    make_file_info(&info, (char *) file);
-    list_push_back(&all_files, &(info.elem));
+    struct file_info *info = (struct file_info *) malloc(sizeof(struct file_info));
+    make_file_info(info, (char *) file);
+    list_push_back(&all_files, &(info->elem));
     return true;
   }
   return false;
@@ -371,26 +369,28 @@ int open(const char *file_name) {
   // Get lock to modify all_files
   // lock_acquire(fd_lock);
 
+  // Check if file name is NULL or ""
   if (file_name == NULL ) {
     exit(-1);
   } else if (!strcmp(file_name, "")) {
     return -1;
   }
-
   struct file_info *info = find_file_info(file_name);
   
-  // File has not been created
+  // If file has not been created
   if(info == NULL) {
-    struct file_info new_info;
+    struct file_info *new_info = (struct file_info *) malloc(sizeof(struct file_info));
     struct file *file = filesys_open(file_name);
+    new_info->file = file;
     if (file == NULL) {
       return -1;
     }
     // Need to have file in our list
-    make_file_info(&new_info, (char *) file_name);
-    new_info.file = file;
-    new_info.is_open = true;
-    info = &new_info;
+    make_file_info(new_info, (char *) file_name);
+    new_info->file = file;
+    new_info->is_open = true;
+    info = new_info;
+    list_push_back(&all_files, &(info->elem));
   } 
 
   if (!info->is_open) {
@@ -398,14 +398,15 @@ int open(const char *file_name) {
     info->is_open = true;
   }  
 
-  struct fd_elem elem;
-  init_fd_elem(&elem);
-  list_push_back(info->fds, &(elem.fd_e));
+  struct fd_elem *elem = (struct fd_elem *) malloc(sizeof(struct fd_elem));
+  init_fd_elem(elem);
+  list_push_back(info->fds, &(elem->fd_e));
 
-  struct thread_fd_elem t_elem = {.fd = elem.fd};
-  list_push_back(thread_current()->fds, &(t_elem.fd_e));
+  struct thread_fd_elem *t_elem = (struct thread_fd_elem *) malloc(sizeof(struct fd_elem));
+  t_elem->fd = elem->fd;
+  list_push_back(&(thread_current()->fds), &(t_elem->fd_e));
 
-  return elem.fd;
+  return elem->fd;
 }
 
 /* Implements the filesize system call by calculating the size of the file with
@@ -438,7 +439,7 @@ int write(int fd, const void *buffer, unsigned size) {
     putbuf((const char *) buffer, size);
   } else {
     // Write buffer to file, checking how many bytes can be written to
-    // return file_write(get_open_file(fd)->file, buffer, size);
+    // return file_write(fd_to_file(fd), buffer, size);
   }
   return size;
 }
@@ -466,7 +467,6 @@ unsigned tell(int fd) {
 - Sets is_open to false
 - Removes the file if it was removed by another thread */
 void close(int fd) {
-  // lock_acquire(fd_lock);
   if (is_fd_valid(fd)) {
     struct file_info *info = fd_to_file_info(fd);
     remove_fd(fd);
@@ -522,9 +522,9 @@ void rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem) {
 
 /* Returns the thread_fd_elem struct with the specified fd */
 struct thread_fd_elem *find_fd_elem(int fd) {
-  if (!list_empty(thread_current()->fds)) {
-    for (struct list_elem *curr = list_begin(thread_current()->fds); 
-         curr != list_tail(thread_current()->fds); curr = list_next(curr)) {
+  if (!list_empty(&(thread_current()->fds))) {
+    for (struct list_elem *curr = list_begin(&(thread_current()->fds)); 
+         curr != list_tail(&(thread_current()->fds)); curr = list_next(curr)) {
       struct thread_fd_elem *elem = list_entry(curr, struct thread_fd_elem, fd_e);
       if (fd == elem->fd) {
         return elem;
