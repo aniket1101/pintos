@@ -449,7 +449,7 @@ int write(int fd, const void *buffer, unsigned size) {
     putbuf((const char *) buffer, size);
   } else {
     // Write buffer to file, checking how many bytes can be written to
-    if (is_fd_valid(fd)) {
+    if (check_pointer((void *) buffer) && is_fd_valid(fd)) {
       return file_write(fd_to_file(fd), buffer, size);
     } 
     exit(-1);
