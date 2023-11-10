@@ -7,14 +7,14 @@
 void syscall_init (void);
 
 struct fd_elem {
+    struct list_elem elem;
     int fd;
     off_t offset;
-    struct list_elem fd_e;
 };
 
 struct thread_fd_elem {
+    struct list_elem elem;
     int fd;
-    struct list_elem fd_e;
 };
 
 #endif /* userprog/syscall.h */

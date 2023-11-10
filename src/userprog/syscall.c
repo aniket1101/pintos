@@ -31,12 +31,12 @@ static int get_num_args(int);
 static void *check_pointer(void *);
 
 struct file_info {
+	struct list_elem elem;
 	struct list *fds;
 	struct file *file;
   char *name;
 	bool to_remove;
   bool is_open;
-	struct list_elem elem;
 };
 
 void rem_fd(struct list_elem *, struct list_elem *);
@@ -47,13 +47,17 @@ void *traverse_fds(struct list_elem *, void *);
 void *traverse_all_files(void *, void *);
 struct file_info *find_file_info(const char *);
 void make_file_info(struct file_info *, char name[MAX_FILENAME_SIZE]);
-struct thread_fd_elem *find_fd_elem(int);
+struct thread_fd_elem *find_fd_elem_thread(int);
+struct fd_elem *find_fd_elem(int);
 bool is_fd_valid(int);
 void init_fd_elem(struct fd_elem *);
 struct file_info *fd_to_file_info (int);
 struct file *fd_to_file(int);
 struct file_info *get_info_file(struct list_elem *, struct list_elem * UNUSED);
 struct file_info *get_file_info(struct list_elem *, void *);
+struct file_info * fd_to_file_test(int fd);
+bool fd_in_list(int fd, struct list *fds);
+struct file_info * name_to_file_test(char *name);
 
 static struct list all_files;
 
@@ -83,7 +87,7 @@ void init_file_info(struct file_info *info, int fd, struct file *file) {
   list_init(&fds);
   struct fd_elem el;
   el.fd = fd;
-  list_push_back(&fds, &(el.fd_e));
+  list_push_back(&fds, &(el.elem));
   info->fds = &fds;
   info->to_remove = false;
   info->file = file;
@@ -252,17 +256,16 @@ void *fd_apply(int *fd, void *func) {
 
 void *traverse_fds(struct list_elem *curr, void *aux) {
   struct file_info *info = list_entry(curr, struct file_info, elem);
-  struct list_elem *elem;
+  struct list_elem *element;
   int fd = *((int *) (aux)); 
   elemFunc func = (elemFunc) (aux + sizeof(int)); 
-  
   if (!list_empty(info->fds)) {
-    for (elem = list_begin(info->fds); 
-        elem != list_tail(info->fds); elem = list_next(elem)) {
-      struct fd_elem *fd_el = list_entry(elem, struct fd_elem, fd_e);
+    for (element = list_begin(info->fds); 
+        element != list_tail(info->fds); element = list_next(element)) {
+      struct fd_elem *fd_el = list_entry(element, struct fd_elem, elem);
 
       if (fd == fd_el->fd) {
-        return func(curr, elem);
+        return func(curr, element);
       }
 
     }
@@ -319,7 +322,7 @@ int wait(pid_t pid UNUSED) {
 - Adding the struct to the list of files */
 bool create(const char *file, unsigned initial_size) {
 
-  if (file == NULL) {
+  if (!check_pointer((char *) file)) {
     exit(-1);
   }
 
@@ -363,19 +366,30 @@ struct file_info *get_file_info(struct list_elem *element, void *aux) {
   return NULL;
 }
 
+struct file_info * name_to_file_test(char *name) {
+  if (!list_empty(&all_files)) {
+      for (struct list_elem *curr = list_begin(&all_files); 
+         curr != list_tail(&all_files); curr = list_next(curr)) {
+      struct file_info *file = list_entry(curr, struct file_info, elem);
+      if (!strcmp(name, file->name)) {
+        return file;
+      }
+    }
+  }
+  return NULL;
+}
+
 // TODO
 int open(const char *file_name) {
   // Get lock to modify all_files
   // lock_acquire(fd_lock);
-
-  // Check if file name is NULL or ""
-  if (file_name == NULL ) {
+  if (check_pointer((char *) file_name) == NULL) {
     exit(-1);
   } else if (!strcmp(file_name, "")) {
     return -1;
   }
-  struct file_info *info = find_file_info(file_name);
-  
+  // struct file_info *info = find_file_info(file_name);
+  struct file_info *info = name_to_file_test((char *) file_name);
   // If file has not been created
   if(info == NULL) {
     struct file_info *new_info = (struct file_info *) malloc(sizeof(struct file_info));
@@ -399,11 +413,11 @@ int open(const char *file_name) {
 
   struct fd_elem *elem = (struct fd_elem *) malloc(sizeof(struct fd_elem));
   init_fd_elem(elem);
-  list_push_back(info->fds, &(elem->fd_e));
+  list_push_back(info->fds, &(elem->elem));
 
   struct thread_fd_elem *t_elem = (struct thread_fd_elem *) malloc(sizeof(struct fd_elem));
   t_elem->fd = elem->fd;
-  list_push_back(&(thread_current()->fds), &(t_elem->fd_e));
+  list_push_back(&(thread_current()->fds), &(t_elem->elem));
 
   return elem->fd;
 }
@@ -461,13 +475,41 @@ unsigned tell(int fd) {
   }
 }
 
+bool fd_in_list(int fd, struct list *fds) {
+
+  if (!list_empty(fds)) {
+
+    for (struct list_elem *curr = list_begin(fds); 
+       curr != list_end(fds); curr = list_next(curr)) {
+      struct fd_elem *elem = list_entry(curr, struct fd_elem, elem);
+      if (fd == elem->fd) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+struct file_info * fd_to_file_test(int fd) {
+  if (!list_empty(&all_files)) {
+      for (struct list_elem *curr = list_begin(&all_files); 
+         curr != list_end(&all_files); curr = list_next(curr)) {
+      struct file_info *element = list_entry(curr, struct file_info, elem);
+      if (fd_in_list(fd, element->fds)) {
+        return element;
+      }
+    }
+  }
+  return NULL;
+}
+
 /* Implements the close system call by:
 - Removing the fd from the file's list of possible fds
 - Sets is_open to false
 - Removes the file if it was removed by another thread */
 void close(int fd) {
-  if (is_fd_valid(fd)) {
-    struct file_info *info = fd_to_file_info(fd);
+  if (fd_to_file_test(fd) != NULL) {
+    struct file_info *info = fd_to_file_test(fd);
     remove_fd(fd);
     if(list_empty(info->fds)) {
       file_close(info->file);
@@ -506,7 +548,8 @@ bool is_fd_valid(int fd) {
 of fds */
 void remove_fd(int fd) {
   fd_apply(&fd, &rem_fd);
-  list_remove(&(find_fd_elem(fd)->fd_e));
+  list_remove(&(find_fd_elem(fd)->elem)); // file
+  list_remove(&(find_fd_elem_thread(fd)->elem)); // thread
 }
 
 /* Helper for remove_fd. Removes an fd from the file's possible fds and removes
@@ -519,12 +562,26 @@ void rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem) {
   }
 }
 
-/* Returns the thread_fd_elem struct with the specified fd */
-struct thread_fd_elem *find_fd_elem(int fd) {
+struct fd_elem *find_fd_elem(int fd) {
+  if (!list_empty(&all_files)) {
+    for (struct list_elem *curr = list_begin(&all_files); 
+         curr != list_tail(&all_files); curr = list_next(curr)) {
+      struct fd_elem *element = list_entry(curr, struct fd_elem, elem);
+      if (fd == element->fd) {
+        return element;
+      }
+    }
+  }
+  return NULL;
+}
+
+/* Returns the fd_elem struct with the specified fd */
+struct thread_fd_elem *find_fd_elem_thread(int fd) {
+  
   if (!list_empty(&(thread_current()->fds))) {
     for (struct list_elem *curr = list_begin(&(thread_current()->fds)); 
          curr != list_tail(&(thread_current()->fds)); curr = list_next(curr)) {
-      struct thread_fd_elem *elem = list_entry(curr, struct thread_fd_elem, fd_e);
+      struct thread_fd_elem *elem = list_entry(curr, struct thread_fd_elem, elem);
       if (fd == elem->fd) {
         return elem;
       }
