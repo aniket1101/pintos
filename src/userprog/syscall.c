@@ -39,10 +39,15 @@ struct file_info {
 	struct list_elem elem;
 };
 
-void rem_fd(struct list_elem *, struct list_elem *);
+struct function_info {
+  int fd;
+  elemFunc funct;
+};
+
+void *rem_fd(struct list_elem *, struct list_elem *);
 void remove_fd(int);
 void init_file_info(struct file_info *, int, struct file *);
-void *fd_apply(int *, void *);
+void *fd_apply(int, elemFunc);
 void *traverse_fds(struct list_elem *, void *);
 void *traverse_all_files(void *, void *);
 struct file_info *find_file_info(const char *);
@@ -52,7 +57,7 @@ bool is_fd_valid(int);
 void init_fd_elem(struct fd_elem *);
 struct file_info *fd_to_file_info (int);
 struct file *fd_to_file(int);
-struct file_info *get_info_file(struct list_elem *, struct list_elem * UNUSED);
+void *get_info_file(struct list_elem *, struct list_elem * UNUSED);
 struct file_info *get_file_info(struct list_elem *, void *);
 
 static struct list all_files;
@@ -245,23 +250,24 @@ void *traverse_all_files(void *func, void *aux) {
   return NULL;
 }
 
-void *fd_apply(int *fd, void *func) {
-  void *aux[2] = {fd, func};
-  return traverse_all_files (&traverse_fds, aux);
+void *fd_apply(int fd, elemFunc func) {
+  struct function_info fun_info;
+  fun_info.fd = fd;
+  fun_info.funct = func;
+  return traverse_all_files (&traverse_fds, (void *) &fun_info);
 }
 
 void *traverse_fds(struct list_elem *curr, void *aux) {
   struct file_info *info = list_entry(curr, struct file_info, elem);
   struct list_elem *elem;
-  int fd = *((int *) (aux)); 
-  elemFunc func = (elemFunc) (aux + sizeof(int)); 
+  struct function_info *fun_info = (struct function_info *) aux;
   if (!list_empty(info->fds)) {
     for (elem = list_begin(info->fds); 
         elem != list_tail(info->fds); elem = list_next(elem)) {
       struct fd_elem *fd_el = list_entry(elem, struct fd_elem, elem);
 
-      if (fd == fd_el->fd) {
-        return func(curr, elem);
+      if (fun_info->fd == fd_el->fd) {
+        return fun_info->funct(curr, elem);
       }
 
     }
@@ -482,7 +488,7 @@ void close(int fd) {
 
 /* Returns the file_info struct of the file with the specified fd */
 struct file_info *fd_to_file_info (int fd) {
-  return (struct file_info *) fd_apply(&fd, &get_info_file);
+  return (struct file_info *) fd_apply(fd, &get_info_file);
 }
 
 /* Returns the file struct of the file with the specified fd */
@@ -492,8 +498,8 @@ struct file *fd_to_file(int fd) {
 
 /* Helper for fd_to_fie_info. Returns the outer file_info struct from the 
 list_element struct */
-struct file_info *get_info_file(struct list_elem *file_elem, struct list_elem *fd_elem UNUSED) {
-  return list_entry(file_elem, struct file_info, elem);
+void *get_info_file(struct list_elem *file_elem, struct list_elem *fd_elem UNUSED) {
+  return (void *) list_entry(file_elem, struct file_info, elem);
 }
 
 /* Checks whether the current thread has access to the specified fd */
@@ -504,18 +510,19 @@ bool is_fd_valid(int fd) {
 /* Removes an fd from the file's possible fds and from the current threads' list
 of fds */
 void remove_fd(int fd) {
-  fd_apply(&fd, &rem_fd);
+  fd_apply(fd, &rem_fd);
   list_remove(&(find_fd_elem(fd)->elem));
 }
 
 /* Helper for remove_fd. Removes an fd from the file's possible fds and removes
 the file if necessary */
-void rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem) {
+void *rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem) {
   struct file_info *info = list_entry(file_elem, struct file_info, elem);
   list_remove(fd_elem);
   if (!info->is_open && info->to_remove) {
     list_remove(file_elem);
   }
+  return NULL;
 }
 
 /* Returns the thread_fd_elem struct with the specified fd */
