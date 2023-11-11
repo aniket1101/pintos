@@ -48,17 +48,15 @@ static void handle_close(struct intr_frame *f);
 
 /* Syscall functions which have access to the kernel/
    These are exclusively called by handle_ functions */
-static inline pid_t k_exec (const char *file);
-static inline int k_wait (pid_t);
-static inline bool k_create (const char *file, unsigned initial_size);
-static inline bool k_remove (const char *file);
-static inline int k_open (const char *file);
-// static inline int k_filesize (int fd);
-static inline int k_read (int fd, void *buffer, unsigned length);
-static inline int k_write (int fd, const void *buffer, unsigned length);
-// static inline void k_seek (int fd, unsigned position);
-// static unsigned k_tell (int fd);
-static inline void k_close (int fd);
+static inline void kernel_exit (int status) NO_RETURN;
+static inline pid_t kernel_exec (const char *file);
+static inline int kernel_wait (pid_t);
+static inline bool kernel_create (const char *file, unsigned initial_size);
+static inline bool kernel_remove (const char *file);
+static inline int kernel_open (const char *file);
+static inline int kernel_read (int fd, void *buffer, unsigned length);
+static inline int kernel_write (int fd, const void *buffer, unsigned length);
+static inline void kernel_close (int fd);
 
 typedef void (*handler_func)(struct intr_frame *f); 
 handler_func handlers[NUM_SYSCALLS] = {
@@ -138,7 +136,7 @@ syscall_handler (struct intr_frame *f)
     syscall_num, f->esp, sizeof(int *)); 
 
   if (syscall_num < 0 || syscall_num >= NUM_SYSCALLS) {
-    k_exit(-1);
+    kernel_exit(-1);
   } 
 
   handlers[syscall_num](f);
@@ -154,7 +152,7 @@ void *check_pointer(void *ptr) {
     return ptr;
   } 
 
-  k_exit(-1);
+  kernel_exit(-1);
 }
 
 /* Implements the halt system call */
@@ -163,57 +161,57 @@ static void handle_halt(struct intr_frame *f UNUSED) {
   shutdown_power_off();
 }
 
-/* Wrapper for k_exit() */
+/* Wrapper for kernel_exit() */
 static void handle_exit(struct intr_frame *f) {
   PUTBUF("Call exit syscall");
   thread_current()->exit_code = pop_arg(0, int);
 
-  k_exit(thread_current()->exit_code);
+  kernel_exit(thread_current()->exit_code);
 }
 
-/* Wrapper for k_exec() */
+/* Wrapper for kernel_exec() */
 static void handle_exec(struct intr_frame *f UNUSED) {
   PUTBUF("Call exec syscall");
   const char *cmd_line = pop_arg(0, const char *);
   check_pointer((void *)cmd_line);
 
-  f->eax = k_exec(cmd_line);
+  f->eax = kernel_exec(cmd_line);
 }
 
-/* Wrapper for k_wait() */
+/* Wrapper for kernel_wait() */
 static void handle_wait(struct intr_frame *f UNUSED) {
   PUTBUF("Call wait syscall");
   pid_t pid = pop_arg(0, pid_t);
 
-  f->eax = k_wait(pid);
+  f->eax = kernel_wait(pid);
 }
 
-/* Wrapper for k_create() */
+/* Wrapper for kernel_create() */
 static void handle_create(struct intr_frame *f UNUSED) {
   PUTBUF("Call create syscall");
   const char *file = pop_arg(0, const char *);
   unsigned initial_size = pop_arg(1, unsigned);
   check_pointer((void *) file);
 
-  f->eax = k_create(file, initial_size);
+  f->eax = kernel_create(file, initial_size);
 }
 
-/* Wrapper for k_remove() function */
+/* Wrapper for kernel_remove() function */
 static void handle_remove(struct intr_frame *f UNUSED) {
   PUTBUF("Call remove syscall");
   const char *file = pop_arg(0, const char *);
   check_pointer((void *) file);
 
-  f->eax = k_remove(file);
+  f->eax = kernel_remove(file);
 }
 
-/* Wrapper for k_open() */
+/* Wrapper for kernel_open() */
 static void handle_open(struct intr_frame *f UNUSED) {
   PUTBUF("Call open syscall");
   const char *file_name = pop_arg(0, const char *);
   check_pointer((void *) file_name);
 
-  f->eax = k_open(file_name);
+  f->eax = kernel_open(file_name);
 }
 
 
@@ -223,13 +221,13 @@ static void handle_filesize(struct intr_frame *f UNUSED) {
   PUTBUF("Call filesize syscall");
   int fd = pop_arg(0, int);
   if (!is_fd_valid(fd)) {
-    k_exit(-1);
+    kernel_exit(-1);
   }
 
   f->eax = file_length(fd_to_file(fd));
 }
 
-/* Wrapper for k_write() */
+/* Wrapper for kernel_write() */
 static void handle_read(struct intr_frame *f UNUSED) {
   PUTBUF("Call read syscall");
   int fd = pop_arg(0, int);
@@ -237,10 +235,10 @@ static void handle_read(struct intr_frame *f UNUSED) {
   unsigned size = pop_arg(2, unsigned);
   check_pointer((void *) buffer);
 
-  f->eax = k_read(fd, buffer, size);
+  f->eax = kernel_read(fd, buffer, size);
 }
 
-/* Wrapper for k_write() */
+/* Wrapper for kernel_write() */
 static void handle_write(struct intr_frame *f) {
   PUTBUF("Call write syscall");
   int fd = pop_arg(0, int);
@@ -248,7 +246,7 @@ static void handle_write(struct intr_frame *f) {
   unsigned size = pop_arg(2, unsigned);
   check_pointer((void *) buffer);
 
-  f->eax = k_write(fd, buffer, size);
+  f->eax = kernel_write(fd, buffer, size);
 }
 
 /* Implements the seek system call by changing the file's position */
@@ -258,7 +256,7 @@ static void handle_seek(struct intr_frame *f UNUSED) {
   unsigned position = pop_arg(1, unsigned);
 
   if (!is_fd_valid(fd)) {
-    k_exit(-1);
+    kernel_exit(-1);
   }
 
   file_seek(fd_to_file(fd), position);
@@ -269,17 +267,17 @@ static void handle_tell(struct intr_frame *f UNUSED) {
   PUTBUF("Call tell syscall");
   int fd = pop_arg(0, int);
   if (!is_fd_valid(fd)) {
-    k_exit(-1);
+    kernel_exit(-1);
   }
 
   f->eax = file_tell(fd_to_file(fd));
 }
 
-/* Wrapper for k_close() */
+/* Wrapper for kernel_close() */
 static void handle_close(struct intr_frame *f UNUSED) {
   PUTBUF("Call close syscall");
   int fd = pop_arg(0, int);
-  k_close(fd);
+  kernel_close(fd);
 }
 
 /* Below are implementations of syscall functions with kernel access */ 
@@ -287,7 +285,7 @@ static void handle_close(struct intr_frame *f UNUSED) {
 /* Implements the exit system call by:
 - Setting the thread's exit code to the status
 - Outputting a message with the exit code to the terminal */
-void k_exit(int status) {
+static inline void kernel_exit(int status) {
   char buf[MAX_SIZE]; int cnt;
   cnt = snprintf(buf, MAX_SIZE, "%s: exit(%d)\n", 
     thread_current()->name, status);
@@ -300,14 +298,14 @@ void k_exit(int status) {
 /* Implements the wait system call by:
   - Waiting for process with pid to exit
   - Returning the returned pid */  
-static inline pid_t k_wait(pid_t pid) {
+static inline pid_t kernel_wait(pid_t pid) {
   return process_wait(pid);
 }
 
 /* Implements the exec system call by:
   - Executing the process called in cmd_line
   - Returning the returned pid */  
-static inline pid_t k_exec(const char* cmd_line) {
+static inline pid_t kernel_exec(const char* cmd_line) {
   pid_t pid = ((pid_t) process_execute(cmd_line));
   int result UNUSED = process_wait(pid);
   
@@ -323,7 +321,7 @@ static inline pid_t k_exec(const char* cmd_line) {
   - Checking that the name is valid
   - Makes a file_info struct for the new file
   - Adding the struct to the list of files */
-static inline bool k_create(const char *file, unsigned initial_size) {
+static inline bool kernel_create(const char *file, unsigned initial_size) {
   if (filesys_create(file, (off_t) initial_size) && 
       strlen(file) <= MAX_FILENAME_SIZE) {
     struct file_info *info = (struct file_info *) malloc(sizeof(struct file_info));
@@ -339,7 +337,7 @@ static inline bool k_create(const char *file, unsigned initial_size) {
   - Getting the file_info struct of the file with the specified name
   - Sets to_remove to true
   - Deletes the file if the file is closed */
-static inline bool k_remove(const char *file) {
+static inline bool kernel_remove(const char *file) {
   struct file_info *info = find_file_info(file);
   
   if (info != NULL) {
@@ -356,7 +354,7 @@ static inline bool k_remove(const char *file) {
   - Checking that the file_name is valid
   - Finds/creates the file
   - Adds to the list of open files */
-static inline int k_open(const char* file_name) {
+static inline int kernel_open(const char* file_name) {
   // Check if file name is ""
   if (!strcmp(file_name, "")) {
     return -1;
@@ -399,26 +397,26 @@ static inline int k_open(const char* file_name) {
   return elem->fd;
 }
 
-static inline int k_read(int fd, void *buffer, unsigned size) {
+static inline int kernel_read(int fd, void *buffer, unsigned size) {
   if (fd == STDIN_FILENO) {
     return input_getc();
   }
 
   if (!is_fd_valid(fd)) {
-    k_exit(-1);
+    kernel_exit(-1);
   }
 
   return file_read(fd_to_file(fd), buffer, size);
 }
 
-static inline int k_write(int fd, const void *buffer, unsigned size) {
+static inline int kernel_write(int fd, const void *buffer, unsigned size) {
   if (fd == STDOUT_FILENO) {
     putbuf((const char *) buffer, size);
     return size;
   }
 
   if (!is_fd_valid(fd)) {
-    k_exit(-1);
+    kernel_exit(-1);
   } 
   
   return file_write(fd_to_file(fd), buffer, size);
@@ -428,9 +426,9 @@ static inline int k_write(int fd, const void *buffer, unsigned size) {
   - Removing the fd from the file's list of possible fds
   - Sets is_open to false
   - Removes the file if it was removed by another thread */
-static inline void k_close(int fd) {
+static inline void kernel_close(int fd) {
   if (!is_fd_valid(fd)) {
-    k_exit(-1);
+    kernel_exit(-1);
   }
 
   struct file_info *info = fd_to_file_info(fd);
@@ -440,7 +438,7 @@ static inline void k_close(int fd) {
     file_close(info->file);
     info->is_open = false;
     if (info->to_remove) {
-      k_remove(info->name);
+      kernel_remove(info->name);
     }
   }
 }
