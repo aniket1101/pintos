@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <user/syscall.h>
+#include "userprog/syscall.h"
 #include "userprog/process.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
@@ -95,7 +96,7 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   if (!success) {
     PUTBUF("Load failed");
-    exit(-1);
+    thread_exit();
   } 
 
   push_args(&if_, arg);
@@ -114,7 +115,9 @@ start_process (void *file_name_)
 
 /* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
 void push_args(struct intr_frame *if_, const struct arg *arg) {
-  ASSERT(if_->esp == PHYS_BASE);
+  if (if_->esp != PHYS_BASE) {
+    k_exit(-1);
+  }
 
   PUTBUF("Push args onto stack:");
   PUTBUF_FORMAT("\tesp at PHYS_BASE = %p", if_->esp);
@@ -188,7 +191,7 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   PUTBUF_FORMAT("\tesp at %p", if_->esp);
 
   if (if_->esp < PHYS_BASE - PGSIZE) { // Stack overflow has occurred
-    exit(-1);
+    k_exit(-1);
   }
 }
 

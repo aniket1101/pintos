@@ -13,6 +13,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
+#include "userprog/debug.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -677,6 +678,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->eff_priority = priority;
   list_init(&t->held_locks);
   t->magic = THREAD_MAGIC;
+  
+  #ifdef USERPROG
+    list_init(&t->fds);
+    PUTBUF("IS INITIALISED");
+  #endif
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
