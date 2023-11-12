@@ -50,7 +50,10 @@ process_execute (const char *file_name)
   char fn_copy[strlen(file_name) + 1];
   strlcpy (fn_copy, file_name, strlen(file_name) + 1);
 
-  struct arg *arg = palloc_get_page(0);
+  struct arg *arg = palloc_get_page(PAL_ZERO);
+  if (arg == NULL) {
+    thread_exit();
+  }
 
   int i = 0;
   char *token, *save_ptr;
@@ -116,7 +119,6 @@ start_process (void *file_name_)
 /* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
 void push_args(struct intr_frame *if_, const struct arg *arg) {
   if (if_->esp != PHYS_BASE) {
-    process_exit();
     thread_exit();
   }
 
@@ -192,7 +194,6 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   PUTBUF_FORMAT("\tesp at %p", if_->esp);
 
   if (if_->esp < PHYS_BASE - PGSIZE) { // Stack overflow has occurred
-    process_exit();
     thread_exit();
   }
 }
