@@ -212,6 +212,9 @@ process_wait (tid_t child_tid)
 {
   PUTBUF("in wait");
   PUTBUF_FORMAT("hash size is %d", hash_size(get_thread_table()));
+  if (child_tid == TID_ERROR) {
+    return TID_ERROR;
+  }
 
   struct parent_child *link = get_p_c(child_tid);
   // if (hash_size(get_thread_table()) != 0 && link == NULL) { // child_tid is not in list / invalid
