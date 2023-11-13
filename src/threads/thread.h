@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "fixed-point.h"
+#include "userprog/syscall.h"
 
 #define MAX(a, b) ((a > b) ? a : b)
 

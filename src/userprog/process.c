@@ -50,7 +50,10 @@ process_execute (const char *file_name)
   char fn_copy[strlen(file_name) + 1];
   strlcpy (fn_copy, file_name, strlen(file_name) + 1);
 
-  struct arg *arg = palloc_get_page(0);
+  struct arg *arg = palloc_get_page(PAL_ZERO);
+  if (arg == NULL) {
+    thread_exit();
+  }
 
   int i = 0;
   char *token, *save_ptr;
@@ -116,7 +119,6 @@ start_process (void *file_name_)
 /* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
 void push_args(struct intr_frame *if_, const struct arg *arg) {
   if (if_->esp != PHYS_BASE) {
-    process_exit();
     thread_exit();
   }
 
@@ -192,7 +194,6 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   PUTBUF_FORMAT("\tesp at %p", if_->esp);
 
   if (if_->esp < PHYS_BASE - PGSIZE) { // Stack overflow has occurred
-    process_exit();
     thread_exit();
   }
 }
@@ -209,6 +210,38 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
 int
 process_wait (tid_t child_tid) 
 {
+  PUTBUF("in wait");
+  PUTBUF_FORMAT("hash size is %d", hash_size(get_thread_table()));
+
+  struct parent_child *link = get_p_c(child_tid);
+  // if (hash_size(get_thread_table()) != 0 && link == NULL) { // child_tid is not in list / invalid
+  //   PUTBUF("returning -1");
+  //   return -1;
+  // }
+
+
+  if (link != NULL) {
+    PUTBUF("was not null");
+    if (link->p_tid != thread_tid()) { // not direct child
+      return -1;
+    }
+    if(link->is_waiting) {
+      return -1;
+    }
+
+    link->is_waiting = true;
+    
+    if (!link->c_is_alive) { 
+      return link->c_exit_code;
+    }
+
+    PUTBUF("at sema");
+    sema_down(&link->waiter);
+    PUTBUF("after sema");
+
+    return link->c_exit_code;
+  }
+  PUTBUF("SLEEPING");
   timer_sleep(600);
   return child_tid;
 }
@@ -218,6 +251,15 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  struct parent_child *link = get_p_c(thread_tid());
+  if(link != NULL) {
+    PUTBUF_FORMAT("EXIT CODE IS SET to %d", thread_current()->exit_code);
+
+    link->c_exit_code = thread_current()->exit_code;
+    PUTBUF("EXIT CODE IS SET");
+    link->c_is_alive = false;
+    sema_up(&link->waiter);
+  }
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back

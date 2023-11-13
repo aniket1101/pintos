@@ -116,6 +116,37 @@ static struct list all_files;
 
 static int32_t next_fd;
 
+bool tid_less(const struct hash_elem *a,
+                              const struct hash_elem *b,
+                              void *aux UNUSED) {
+  return hash_entry(a, struct parent_child, h_elem)->c_tid
+    < hash_entry(b, struct parent_child, h_elem)->c_tid;
+}
+
+unsigned tid_func(const struct hash_elem *e, void *aux UNUSED) {
+  return hash_entry(e, struct parent_child, h_elem)->c_tid;
+}
+
+void free_table(struct hash_elem *e, void *aux UNUSED) {
+  free(hash_entry(e, struct parent_child, h_elem));
+}
+
+struct parent_child *get_p_c(int c_tid) {
+  struct hash *hash = get_thread_table();
+  if (!hash_empty(hash)) {
+    struct hash_iterator i;
+
+    hash_first (&i, hash);
+    while (hash_next (&i)) {
+        struct parent_child *link = hash_entry (hash_cur (&i), struct parent_child, h_elem);
+        if (link->c_tid == c_tid) {
+          return link;
+        }
+    }
+  }
+  return NULL;
+}
+
 void
 syscall_init (void) 
 {
@@ -165,6 +196,8 @@ static void handle_halt(struct intr_frame *f UNUSED) {
 static void handle_exit(struct intr_frame *f) {
   PUTBUF("Call exit syscall");
   thread_current()->exit_code = pop_arg(0, int);
+  PUTBUF_FORMAT("EXIT CODE IS SET to %d", thread_current()->exit_code);
+  
 
   kernel_exit(thread_current()->exit_code);
 }
@@ -306,15 +339,42 @@ static inline pid_t kernel_wait(pid_t pid) {
   - Executing the process called in cmd_line
   - Returning the returned pid */  
 static inline pid_t kernel_exec(const char* cmd_line) {
-  pid_t pid = ((pid_t) process_execute(cmd_line));
-  int result UNUSED = process_wait(pid);
-  
-  // need to check result
-  if (pid == PID_ERROR) {
-    return pid;
+  pid_t p_tid = thread_tid();
+  if (strlen(cmd_line) > 128) {
+    return TID_ERROR;
   }
-  
-  return pid - 1;
+  PUTBUF_FORMAT("Execute command: %s", cmd_line);
+  pid_t pid = ((pid_t) process_execute(cmd_line));
+  PUTBUF_FORMAT("after executing, pid is %d", pid);
+
+  struct parent_child *exists_already = get_p_c(pid);
+  if (pid == TID_ERROR || exists_already != NULL) {
+    PUTBUF("TID error");
+    return TID_ERROR;
+  }
+
+
+  struct parent_child *link = (struct parent_child *) malloc
+                                              (sizeof(struct parent_child));
+  PUTBUF("made link");
+  if (link != NULL) {
+
+    PUTBUF_FORMAT("pid is %d", pid);
+
+    link->p_tid = p_tid;
+    link->p_is_alive = true;
+    link->c_tid = pid;
+    link->c_is_alive = true;
+    link->is_waiting = false;
+    sema_init(&(link->waiter), 0);
+    PUTBUF("inserting to hash");
+    hash_insert(get_thread_table(), &(link->h_elem));
+    PUTBUF_FORMAT("hash size is %d", hash_size(get_thread_table()));
+    PUTBUF_FORMAT("c_tid is %d", get_p_c(pid)->c_tid);
+  }
+
+  PUTBUF_FORMAT("returning pid %d", pid);
+  return pid;
 }
 
 /* Implements the create system call by:

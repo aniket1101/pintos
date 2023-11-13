@@ -5,8 +5,12 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <hash.h>
+#include <debug.h>
 
 /* Page directory with kernel mappings only. */
 extern uint32_t *init_page_dir;
+
+struct hash *get_thread_table(void);
 
 #endif /* threads/init.h */

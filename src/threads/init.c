@@ -40,6 +40,7 @@
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
+#include "userprog/debug.h"
 
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
@@ -72,6 +73,8 @@ static void usage (void);
 static void locate_block_devices (void);
 static void locate_block_device (enum block_type, const char *name);
 #endif
+
+struct hash thread_table;
 
 int main (void) NO_RETURN;
 
@@ -135,11 +138,13 @@ main (void)
   swap_init ();
 #endif
 
+  hash_init(&thread_table, &tid_func, &tid_less, NULL);
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */
   run_actions (argv);
 
+  hash_destroy(&thread_table, &free_table);
   /* Finish up. */
   shutdown ();
   thread_exit ();
@@ -435,3 +440,7 @@ locate_block_device (enum block_type role, const char *name)
     }
 }
 #endif
+
+struct hash *get_thread_table(void) {
+  return &thread_table;
+}
