@@ -25,8 +25,11 @@
 typedef void * (*elemFunc) (struct list_elem *, struct list_elem *);
 typedef void * (*infoFunc) (struct list_elem *, void *);
 
-#define pop_stack(esp, type) *((type *) check_pointer(esp))
-#define pop_arg(argnum, type) pop_stack(f->esp + ((argnum + 1) * WORD_SIZE), type)
+#define arg_esp_offs(argnum, esp) (esp + ((argnum + 1) * WORD_SIZE))
+
+#define pop_var(esp, type) *((type *) check_pointer(esp))
+#define pop_arg(argnum, type) pop_var(arg_esp_offs(argnum, f->esp), type)
+#define pop_ptr_arg(argnum, type) (type) check_pointer((void *) pop_arg(argnum, type))
 
 #define NUM_SYSCALLS 13
 
@@ -131,7 +134,7 @@ syscall_handler (struct intr_frame *f)
   PUTBUF("Start syscall:");
   HEX_DUMP_ESP(f->esp);  
 
-  int syscall_num = pop_stack(f->esp, int);
+  int syscall_num = pop_var(f->esp, int);
   PUTBUF_FORMAT("\tpopped syscall num = %d off at %p. moved stack up by %d", 
     syscall_num, f->esp, sizeof(int *)); 
 
@@ -172,8 +175,7 @@ static void handle_exit(struct intr_frame *f) {
 /* Wrapper for kernel_exec() */
 static void handle_exec(struct intr_frame *f UNUSED) {
   PUTBUF("Call exec syscall");
-  const char *cmd_line = pop_arg(0, const char *);
-  check_pointer((void *)cmd_line);
+  const char *cmd_line = pop_ptr_arg(0, const char *);
 
   f->eax = kernel_exec(cmd_line);
 }
@@ -189,9 +191,8 @@ static void handle_wait(struct intr_frame *f UNUSED) {
 /* Wrapper for kernel_create() */
 static void handle_create(struct intr_frame *f UNUSED) {
   PUTBUF("Call create syscall");
-  const char *file = pop_arg(0, const char *);
+  const char *file = pop_ptr_arg(0, const char *);
   unsigned initial_size = pop_arg(1, unsigned);
-  check_pointer((void *) file);
 
   f->eax = kernel_create(file, initial_size);
 }
@@ -199,8 +200,7 @@ static void handle_create(struct intr_frame *f UNUSED) {
 /* Wrapper for kernel_remove() function */
 static void handle_remove(struct intr_frame *f UNUSED) {
   PUTBUF("Call remove syscall");
-  const char *file = pop_arg(0, const char *);
-  check_pointer((void *) file);
+  const char *file = pop_ptr_arg(0, const char *);
 
   f->eax = kernel_remove(file);
 }
@@ -208,8 +208,7 @@ static void handle_remove(struct intr_frame *f UNUSED) {
 /* Wrapper for kernel_open() */
 static void handle_open(struct intr_frame *f UNUSED) {
   PUTBUF("Call open syscall");
-  const char *file_name = pop_arg(0, const char *);
-  check_pointer((void *) file_name);
+  const char *file_name = pop_ptr_arg(0, const char *);
 
   f->eax = kernel_open(file_name);
 }
@@ -231,9 +230,8 @@ static void handle_filesize(struct intr_frame *f UNUSED) {
 static void handle_read(struct intr_frame *f UNUSED) {
   PUTBUF("Call read syscall");
   int fd = pop_arg(0, int);
-  void *buffer = pop_arg(1, void *);
+  void *buffer = pop_ptr_arg(1, void *);
   unsigned size = pop_arg(2, unsigned);
-  check_pointer((void *) buffer);
 
   f->eax = kernel_read(fd, buffer, size);
 }
@@ -242,9 +240,8 @@ static void handle_read(struct intr_frame *f UNUSED) {
 static void handle_write(struct intr_frame *f) {
   PUTBUF("Call write syscall");
   int fd = pop_arg(0, int);
-  const void *buffer = pop_arg(1, const void *);
+  const void *buffer = pop_ptr_arg(1, const void *);
   unsigned size = pop_arg(2, unsigned);
-  check_pointer((void *) buffer);
 
   f->eax = kernel_write(fd, buffer, size);
 }
