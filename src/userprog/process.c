@@ -21,6 +21,7 @@
 #include "threads/vaddr.h"
 #include "devices/timer.h"
 #include "debug.h"
+#include "threads/malloc.h"
 
 #define PUSH_ESP(val, type) \
   if_->esp -= sizeof(type); \
@@ -211,42 +212,48 @@ int
 process_wait (tid_t child_tid) 
 {
   PUTBUF("in wait");
-  PUTBUF_FORMAT("hash size is %d", hash_size(get_thread_table()));
   if (child_tid == TID_ERROR) {
     return TID_ERROR;
   }
 
   struct parent_child *link = get_p_c(child_tid);
-  // if (hash_size(get_thread_table()) != 0 && link == NULL) { // child_tid is not in list / invalid
-  //   PUTBUF("returning -1");
-  //   return -1;
-  // }
+  int p_tid = thread_tid();
 
+  // Direct child or already waiting
+  if (link != NULL && (link->p_tid != p_tid || link->is_waiting)) { 
+    return TID_ERROR;
+  }
 
-  if (link != NULL) {
-    PUTBUF("was not null");
-    if (link->p_tid != thread_tid()) { // not direct child
-      return -1;
+  if (link == NULL) {
+    // exec was not called before
+
+    link = (struct parent_child *) malloc (sizeof(struct parent_child));
+
+    if (link == NULL) { // malloc error
+      PUTBUF("returning -1");
+      return TID_ERROR;
     }
-    if(link->is_waiting) {
-      return -1;
-    }
 
-    link->is_waiting = true;
+    PUTBUF("made link");
+
+    link->p_tid = p_tid;
+    link->p_is_alive = true;
+    link->c_tid = child_tid;
+    link->c_is_alive = true;
+    sema_init(&(link->waiter), 0);
+    PUTBUF("inserting to hash");
+    hash_insert(get_thread_table(), &(link->h_elem));
+  } 
+  // For called in exec and wait
+  link->is_waiting = true;
     
-    if (!link->c_is_alive) { 
-      return link->c_exit_code;
-    }
-
-    PUTBUF("at sema");
-    sema_down(&link->waiter);
-    PUTBUF("after sema");
-
+  if (!link->c_is_alive) { 
     return link->c_exit_code;
   }
-  PUTBUF("SLEEPING");
-  timer_sleep(600);
-  return child_tid;
+
+  sema_down(&link->waiter);
+
+  return link->c_exit_code;
 }
 
 /* Free the current process's resources. */
