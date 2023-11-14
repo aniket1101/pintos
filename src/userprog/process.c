@@ -224,8 +224,8 @@ process_wait (tid_t child_tid)
     return TID_ERROR;
   }
 
-  if (link == NULL) {
-    // exec was not called before
+  // Running kernel thread is waiting on some other thread
+  if (thread_tid() == 1) {
 
     link = (struct parent_child *) malloc (sizeof(struct parent_child));
 
@@ -244,6 +244,10 @@ process_wait (tid_t child_tid)
     PUTBUF("inserting to hash");
     hash_insert(get_thread_table(), &(link->h_elem));
   } 
+  // Thread is not the running kernel thread and has called wait without exec
+  if (link == NULL) {
+    return TID_ERROR;
+  }
   // For called in exec and wait
   link->is_waiting = true;
     
