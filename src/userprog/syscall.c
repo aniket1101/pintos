@@ -48,7 +48,6 @@ static void handle_close(struct intr_frame *f);
 
 /* Syscall functions which have access to the kernel/
    These are exclusively called by handle_ functions */
-static inline void kernel_exit (int status) NO_RETURN;
 static inline pid_t kernel_exec (const char *file);
 static inline int kernel_wait (pid_t);
 static inline bool kernel_create (const char *file, unsigned initial_size);
@@ -195,11 +194,9 @@ static void handle_halt(struct intr_frame *f UNUSED) {
 /* Wrapper for kernel_exit() */
 static void handle_exit(struct intr_frame *f) {
   PUTBUF("Call exit syscall");
-  thread_current()->exit_code = pop_arg(0, int);
-  PUTBUF_FORMAT("EXIT CODE IS SET to %d", thread_current()->exit_code);
-  
+  int status = pop_arg(0, int);
 
-  kernel_exit(thread_current()->exit_code);
+  kernel_exit(status);
 }
 
 /* Wrapper for kernel_exec() */
@@ -318,13 +315,13 @@ static void handle_close(struct intr_frame *f UNUSED) {
 /* Implements the exit system call by:
 - Setting the thread's exit code to the status
 - Outputting a message with the exit code to the terminal */
-static inline void kernel_exit(int status) {
+void kernel_exit(int status) {
   char buf[MAX_SIZE]; int cnt;
+  thread_current()->exit_code = status;
   cnt = snprintf(buf, MAX_SIZE, "%s: exit(%d)\n", 
     thread_current()->name, status);
   putbuf(buf, cnt);
 
-  process_exit();
   thread_exit();
 }
 

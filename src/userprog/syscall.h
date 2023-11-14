@@ -10,6 +10,7 @@
 
 void syscall_init (void);
 void *check_pointer(void *ptr);
+void kernel_exit(int status) NO_RETURN; 
 
 struct fd_elem {
     struct list_elem elem;
