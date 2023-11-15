@@ -571,17 +571,27 @@ bool is_fd_valid(int fd) {
 /* Removes an fd from the file's possible fds and from the current threads' list
 of fds */
 void remove_fd(int fd) {
+  // Fds list in file_info
   fd_apply(fd, &rem_fd);
-  list_remove(&(find_fd_elem(fd)->elem));
+
+  // Fds list in thread
+  struct thread_fd_elem *t_elem = find_fd_elem(fd);
+  list_remove(&(t_elem->elem));
+  free(t_elem);
 }
 
 /* Helper for remove_fd. Removes an fd from the file's possible fds and removes
 the file if necessary */
-void *rem_fd(struct list_elem *file_elem, struct list_elem *fd_elem) {
+void *rem_fd(struct list_elem *file_elem, struct list_elem *fd_element) {
+  struct fd_elem *f_elem = list_entry(fd_element, struct fd_elem, elem);
+  list_remove(fd_element);
+  free(f_elem);
+  
   struct file_info *info = list_entry(file_elem, struct file_info, elem);
   list_remove(fd_elem);
   if (!info->is_open && info->to_remove) {
     list_remove(file_elem);
+    free(info);
   }
   return NULL;
 }
