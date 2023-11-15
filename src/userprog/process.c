@@ -87,7 +87,11 @@ start_process (void *file_name_)
   struct arg *arg = file_name_;
   struct intr_frame if_;
   bool success;
-
+  struct file *file = filesys_open(arg->v);
+  if (file != NULL) {
+    file_deny_write(file);
+    thread_current()->file = file;
+  }
   PUTBUF("Starting process");
 
   /* Initialize interrupt frame and load executable. */
@@ -266,6 +270,9 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   struct parent_child *link = get_p_c(thread_tid());
+  if (cur->file != NULL) {
+    file_close(cur->file);
+  }
   if(link != NULL) {
     PUTBUF_FORMAT("EXIT CODE IS SET to %d", thread_current()->exit_code);
 

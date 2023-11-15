@@ -114,6 +114,7 @@ struct thread
     uint32_t *pagedir;               /* Page directory. */
     int exit_code;                   /* Exit code. */
     struct list fds;                /* List of fds thread knows*/
+    struct file *file;
 #endif
 
     /* Owned by thread.c. */
