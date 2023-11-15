@@ -110,6 +110,9 @@ void make_file_info(struct file_info *, char name[MAX_FILENAME_SIZE]);
 struct file_info *get_file_info(struct list_elem *, void *);
 struct file_info *find_file_info(const char *);
 struct file_info *fd_to_file_info (int);
+void set_pos(int fd);
+void upd_pos(int fd);
+void *get_fd(struct list_elem *info, struct list_elem *f_elem);
 
 static struct list all_files;
 
@@ -128,6 +131,21 @@ unsigned tid_func(const struct hash_elem *e, void *aux UNUSED) {
 
 void free_table(struct hash_elem *e, void *aux UNUSED) {
   free(hash_entry(e, struct parent_child, h_elem));
+}
+
+void upd_pos(int fd) {
+  // validity has already been checked
+  struct file_info *info = fd_to_file_info(fd);
+  struct fd_elem *f_elem = (struct fd_elem *) fd_apply(fd, &get_fd);
+  f_elem->offset = file_tell(info->file);
+}
+
+
+void set_pos(int fd) {
+  // validity has already been checked
+  struct file_info *info = fd_to_file_info(fd);
+  struct fd_elem *f_elem = (struct fd_elem *) fd_apply(fd, &get_fd);
+  file_seek(info->file, f_elem->offset);
 }
 
 struct parent_child *get_p_c(int c_tid) {
@@ -288,6 +306,7 @@ static void handle_seek(struct intr_frame *f UNUSED) {
     kernel_exit(-1);
   }
   file_seek(fd_to_file(fd), position);
+  upd_pos(fd);
 }
 
 /* Implements the tell system call by returning the file's position */
@@ -297,7 +316,7 @@ static void handle_tell(struct intr_frame *f UNUSED) {
   if (!is_fd_valid(fd)) {
     kernel_exit(-1);
   }
-
+  set_pos(fd);
   f->eax = file_tell(fd_to_file(fd));
 }
 
@@ -456,8 +475,10 @@ static inline int kernel_read(int fd, void *buffer, unsigned size) {
   if (!is_fd_valid(fd)) {
     kernel_exit(-1);
   }
-
-  return file_read(fd_to_file(fd), buffer, size);
+  set_pos(fd);
+  int bytes_read = file_read(fd_to_file(fd), buffer, size);
+  upd_pos(fd);
+  return bytes_read;
 }
 
 static inline int kernel_write(int fd, const void *buffer, unsigned size) {
@@ -470,7 +491,10 @@ static inline int kernel_write(int fd, const void *buffer, unsigned size) {
     kernel_exit(-1);
   } 
   
-  return file_write(fd_to_file(fd), buffer, size);
+  set_pos(fd);
+  int bytes_written = file_write(fd_to_file(fd), buffer, size);
+  upd_pos(fd);
+  return bytes_written;
 }
 
 /* Implements the close system call by:
@@ -616,6 +640,10 @@ void *traverse_all_files(void *func, void *aux) {
     }
   }
   return NULL;
+}
+
+void *get_fd(struct list_elem *info UNUSED, struct list_elem *f_elem) {
+  return list_entry(f_elem, struct fd_elem, elem);
 }
 
 void *fd_apply(int fd, elemFunc func) {
