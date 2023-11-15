@@ -264,7 +264,6 @@ static void handle_read(struct intr_frame *f UNUSED) {
   void *buffer = pop_arg(1, void *);
   unsigned size = pop_arg(2, unsigned);
   check_pointer((void *) buffer);
-
   f->eax = kernel_read(fd, buffer, size);
 }
 
@@ -288,7 +287,6 @@ static void handle_seek(struct intr_frame *f UNUSED) {
   if (!is_fd_valid(fd)) {
     kernel_exit(-1);
   }
-
   file_seek(fd_to_file(fd), position);
 }
 
@@ -359,7 +357,6 @@ static inline pid_t kernel_exec(const char* cmd_line) {
     link->p_is_alive = true;
     link->c_tid = pid;
     link->c_is_alive = true;
-    link->is_waiting = false;
     sema_init(&(link->waiter), 0);
     PUTBUF("inserting to hash");
     hash_insert(get_thread_table(), &(link->h_elem));
@@ -583,9 +580,8 @@ void *rem_fd(struct list_elem *file_elem, struct list_elem *fd_element) {
   struct fd_elem *f_elem = list_entry(fd_element, struct fd_elem, elem);
   list_remove(fd_element);
   free(f_elem);
-  
+
   struct file_info *info = list_entry(file_elem, struct file_info, elem);
-  list_remove(fd_elem);
   if (!info->is_open && info->to_remove) {
     list_remove(file_elem);
     free(info);

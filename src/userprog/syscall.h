@@ -31,7 +31,6 @@ struct parent_child {
     int c_tid;
     int c_exit_code;
     bool c_is_alive;
-    bool is_waiting;
     struct semaphore waiter;
 };
 

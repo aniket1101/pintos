@@ -247,39 +247,29 @@ process_wait (tid_t child_tid)
 
   // Running kernel thread is waiting on some other thread
   if (thread_tid() == 1) {
-
     link = (struct parent_child *) malloc (sizeof(struct parent_child));
 
     if (link == NULL) { // malloc error
-      PUTBUF("returning -1");
       return TID_ERROR;
     }
-
-    PUTBUF("made link");
 
     link->p_tid = p_tid;
     link->p_is_alive = true;
     link->c_tid = child_tid;
     link->c_is_alive = true;
     sema_init(&(link->waiter), 0);
-    PUTBUF("inserting to hash");
     hash_insert(get_thread_table(), &(link->h_elem));
   } 
   // Thread is not the running kernel thread and has called wait without exec
   if (link == NULL) {
     return TID_ERROR;
   }
-  // For called in exec and wait
-  link->is_waiting = true;
-  
+
   sema_down(&link->waiter);
   return return_c_exit_code(link);
 }
 
-  sema_down(&link->waiter);
 
-  return link->c_exit_code;
-}
 
 /* Free the current process's resources. */
 void
