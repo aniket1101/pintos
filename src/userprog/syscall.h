@@ -45,4 +45,6 @@ void free_table (struct hash_elem *e, void *aux UNUSED);
 
 struct parent_child *get_p_c(int c_tid);
 
+void free_parents(int p_tid);
+
 #endif /* userprog/syscall.h */

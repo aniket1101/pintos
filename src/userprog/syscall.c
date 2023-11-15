@@ -647,3 +647,27 @@ void *traverse_fds(struct list_elem *curr, void *aux) {
 
   return NULL;
 }
+
+void free_parents(int p_tid) {
+  struct hash *hash = get_thread_table();
+  struct parent_child *to_remove[MAX_SIZE];
+  int index = -1;
+  if (!hash_empty(hash)) {
+    struct hash_iterator i;
+    hash_first (&i, hash);
+
+    while (hash_next (&i)) {
+      struct parent_child *link = hash_entry (hash_cur (&i), struct parent_child, h_elem);
+    
+      if (link->p_tid == p_tid) {
+        to_remove[index + 1] = link;
+        index++;
+      }
+    }
+  }
+  for (int i = 0; i <= index; i++) {
+    struct parent_child *link = to_remove[i];
+    hash_delete(get_thread_table(), &(link->h_elem));
+    free(link);
+  }
+}

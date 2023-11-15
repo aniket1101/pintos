@@ -22,6 +22,8 @@
 #include "devices/timer.h"
 #include "debug.h"
 #include "threads/malloc.h"
+#include "filesys/file.h"
+#include <hash.h>
 
 #define PUSH_ESP(val, type) \
   if_->esp -= sizeof(type); \
@@ -36,6 +38,8 @@ struct arg {
 };
 
 static void push_args(struct intr_frame *if_, const struct arg *arg);
+
+int return_c_exit_code(struct parent_child *p_c);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -203,6 +207,14 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   }
 }
 
+// Helper function for wait to free an element once used
+int return_c_exit_code(struct parent_child *link) {
+  int e_c = link->c_exit_code;
+  hash_delete(get_thread_table(), &(link->h_elem));
+  free(link);
+  return e_c;
+}
+
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
  * returns -1.  
@@ -223,9 +235,14 @@ process_wait (tid_t child_tid)
   struct parent_child *link = get_p_c(child_tid);
   int p_tid = thread_tid();
 
-  // Direct child or already waiting
-  if (link != NULL && (link->p_tid != p_tid || link->is_waiting)) { 
+  // Direct child
+  if (link != NULL && link->p_tid != p_tid) { 
     return TID_ERROR;
+  }
+
+  // Child exit code is already available
+  if (link != NULL && !link->c_is_alive) { 
+    return return_c_exit_code(link);
   }
 
   // Running kernel thread is waiting on some other thread
@@ -254,10 +271,10 @@ process_wait (tid_t child_tid)
   }
   // For called in exec and wait
   link->is_waiting = true;
-    
-  if (!link->c_is_alive) { 
-    return link->c_exit_code;
-  }
+  
+  sema_down(&link->waiter);
+  return return_c_exit_code(link);
+}
 
   sema_down(&link->waiter);
 
@@ -281,6 +298,7 @@ process_exit (void)
     link->c_is_alive = false;
     sema_up(&link->waiter);
   }
+  free_parents(thread_tid());
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
