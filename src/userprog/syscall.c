@@ -337,9 +337,6 @@ static inline pid_t kernel_wait(pid_t pid) {
   - Returning the returned pid */  
 static inline pid_t kernel_exec(const char* cmd_line) {
   pid_t p_tid = thread_tid();
-  if (strlen(cmd_line) > 128) {
-    return TID_ERROR;
-  }
   PUTBUF_FORMAT("Execute command: %s", cmd_line);
   pid_t pid = ((pid_t) process_execute(cmd_line));
   PUTBUF_FORMAT("after executing, pid is %d", pid);
