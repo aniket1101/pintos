@@ -11,6 +11,7 @@
 #include "userprog/pagedir.h"
 #include "userprog/debug.h"
 #include "threads/interrupt.h"
+#include "threads/malloc.h"
 #include "threads/vaddr.h"
 #include "devices/timer.h"
 #include "devices/shutdown.h"
@@ -298,6 +299,8 @@ static inline bool kernel_remove(const char *file_name) {
     info->should_remove = true;
 
     if (info->num_fds == 0) {
+      file_info_remove(info);
+      free(info);
       return filesys_remove(file_name);
     }
   }
@@ -368,18 +371,20 @@ static int file_modify(int fd_num, file_modify_func modify, const void *buffer, 
   - Sets is_open to false
   - Removes the file if it was removed by another thread */
 static inline void kernel_close(int fd_num) {
-  struct fd *fd_ = thread_remove_fd(fd_num, thread_current());
-  if (fd_ == NULL) {
-    kernel_exit(-1);
-  }
-
-  struct file_info *info = fd_->file_info; //TODO free fd
+  struct fd *fd_ = thread_fd_lookup_safe(fd_num, thread_current());
+  thread_remove_fd(fd_, thread_current());
+  
+  struct file_info *info = fd_->file_info;
   info->num_fds--;
+  
+  free(fd_);
 
   if (info->num_fds == 0) {
     file_close(info->file);
     if (info->should_remove) {
       filesys_remove(info->name);
+      file_info_remove(info);
+      free(info);
     }
   }
 }

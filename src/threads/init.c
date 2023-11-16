@@ -25,6 +25,7 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #include "userprog/pc_link.h"
+#include "userprog/fd.h"
 #include "userprog/exception.h"
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
@@ -139,13 +140,15 @@ main (void)
   swap_init ();
 #endif
 
-  hash_init(&thread_table, &tid_func, &tid_less, NULL);
+  hash_init(pc_link_get_hash_table(), &tid_func, &tid_less, NULL);
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */
   run_actions (argv);
 
-  hash_destroy(&thread_table, &free_table);
+  hash_destroy(pc_link_get_hash_table(), &pc_link_free);
+  hash_destroy(file_info_get_hash_table(), &file_info_free);
+  
   /* Finish up. */
   shutdown ();
   thread_exit ();
@@ -441,7 +444,3 @@ locate_block_device (enum block_type role, const char *name)
     }
 }
 #endif
-
-struct hash *get_thread_table(void) {
-  return &thread_table;
-}

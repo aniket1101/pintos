@@ -245,7 +245,8 @@ process_wait (tid_t child_tid)
   sema_down(&link->waiter);
 
   int exit_code = link->child_exit_code;
-  pc_link_free(link);
+  pc_link_remove(link);
+  pc_link_free(&link->elem, NULL);
   return exit_code;
 }
 
@@ -264,7 +265,7 @@ process_exit (void)
     PUTBUF_FORMAT("Child %s with pid = %d has exited with exit code %d. "
       "Stop waiting", thread_name(), thread_tid(), thread_current()->exit_code);
   }
-  free_parents(thread_tid());
+  pc_link_free_parents(thread_tid());
 
   uint32_t *pd;
 
