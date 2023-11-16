@@ -341,7 +341,6 @@ static inline int kernel_open(const char* file_name) {
       return -1;
     }
   }
-
   if (info->num_fds == 0) {
     struct file *file = filesys_open(file_name);
     if (file == NULL) {
@@ -393,8 +392,13 @@ static int file_modify(int fd_num, file_modify_func modify, const void *buffer, 
   - Sets is_open to false
   - Removes the file if it was removed by another thread */
 static inline void kernel_close(int fd_num) {
+
   lock_acquire(&filesys_lock);
-  struct fd *fd_ = thread_fd_lookup_safe(fd_num, thread_current());
+  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
+  if (fd_ == NULL) {
+    lock_release(&filesys_lock);
+    kernel_exit(-1);
+  }
   thread_remove_fd(fd_, thread_current());
   
   struct file_info *info = fd_->file_info;
