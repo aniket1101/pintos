@@ -49,6 +49,10 @@ process_execute (const char *file_name)
 {
   tid_t tid;
 
+
+  if (strlen(file_name) + 1 >= 4096) {
+    return TID_ERROR;
+  }
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   char fn_copy[strlen(file_name) + 1];
