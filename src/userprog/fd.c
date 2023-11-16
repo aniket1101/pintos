@@ -82,7 +82,6 @@ struct fd *thread_add_fd(struct file_info *info) {
 
 struct fd *thread_remove_fd(int fd, struct thread *t) {
   struct fd fd_ = {.fd_num = fd};
-  
   struct hash_elem *removed_elem = hash_delete(&t->fds, &fd_.elem);
   return removed_elem != NULL ? hash_entry (removed_elem, struct fd, elem) : NULL;
 }
@@ -92,3 +91,11 @@ struct fd *thread_fd_lookup(int fd, struct thread *t) {
   struct hash_elem *found_elem = hash_find (&t->fds, &fd_.elem);
   return found_elem != NULL ? hash_entry (found_elem, struct fd, elem) : NULL;
 } 
+
+struct fd *thread_fd_lookup_safe(int fd, struct thread *t) {
+  struct fd *fd_ = thread_fd_lookup(fd, thread_current());
+  if (fd_ == NULL) {
+    kernel_exit(-1);
+  }
+  return fd_;
+}

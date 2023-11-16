@@ -41,6 +41,7 @@ bool fd_less (const struct hash_elem *a_, const struct hash_elem *b_,
 
 struct fd *thread_add_fd(struct file_info *info);
 struct fd *thread_remove_fd(int fd, struct thread *t);
+struct fd *thread_fd_lookup_safe(int fd, struct thread *t);
 struct fd *thread_fd_lookup(int fd, struct thread *t);
 
 #endif

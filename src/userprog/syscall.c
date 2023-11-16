@@ -174,11 +174,7 @@ static void handle_open(struct intr_frame *f UNUSED) {
 static void handle_filesize(struct intr_frame *f UNUSED) {
   PUTBUF("Call filesize syscall");
   int fd_num = pop_arg(0, int);
-  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
-  if (fd_ == NULL) {
-    kernel_exit(-1);
-  }
-
+  struct fd *fd_ = thread_fd_lookup_safe(fd_num, thread_current());
   f->eax = file_length(fd_->file_info->file);
 }
 
@@ -209,10 +205,7 @@ static void handle_seek(struct intr_frame *f UNUSED) {
   int fd_num = pop_arg(0, int);
   unsigned position = pop_arg(1, unsigned);
 
-  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
-  if (fd_ == NULL) {
-    kernel_exit(-1);
-  }
+  struct fd *fd_ = thread_fd_lookup_safe(fd_num, thread_current());
 
   file_seek(fd_->file_info->file, position);
   fd_->pos = file_tell(fd_->file_info->file);
@@ -223,10 +216,7 @@ static void handle_tell(struct intr_frame *f UNUSED) {
   PUTBUF("Call tell syscall");
   int fd_num = pop_arg(0, int);
 
-  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
-  if (fd_ == NULL) {
-    kernel_exit(-1);
-  }
+  struct fd *fd_ = thread_fd_lookup_safe(fd_num, thread_current());
   
   file_seek(fd_->file_info->file, fd_->pos);
   f->eax = file_tell(fd_->file_info->file);
@@ -353,15 +343,7 @@ static inline int kernel_read(int fd, void *buffer, unsigned size) {
     return input_getc();
   }
 
-  struct fd *fd_ = thread_fd_lookup(fd, thread_current());
-  if (fd_ == NULL) {
-    kernel_exit(-1);
-  }
-
-  file_seek(fd_->file_info->file, fd_->pos);
-  int offset = file_read(fd_->file_info->file, buffer, size);
-  fd_->pos += offset;
-  return offset;
+  return file_modify(fd, &file_read, buffer, size);
 }
 
 static inline int kernel_write(int fd, const void *buffer, unsigned size) {
@@ -369,24 +351,12 @@ static inline int kernel_write(int fd, const void *buffer, unsigned size) {
     putbuf((const char *) buffer, size);
     return size;
   }
-  struct fd *fd_ = thread_fd_lookup(fd, thread_current());
-  if (fd_ == NULL) {
-    kernel_exit(-1);
-  }
 
-  file_seek(fd_->file_info->file, fd_->pos);
-  int offset = file_write(fd_->file_info->file, buffer, size);
-  fd_->pos += offset;
-  return offset;
-  // return file_modify(fd, &file_write, buffer, size);
+  return file_modify(fd, &file_write, buffer, size);
 }
 
-int file_modify(int fd_num, file_modify_func modify, const void *buffer, unsigned size) {
-  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
-  if (fd_ == NULL) {
-    kernel_exit(-1);
-  }
-
+static int file_modify(int fd_num, file_modify_func modify, const void *buffer, unsigned size) {
+  struct fd *fd_ = thread_fd_lookup_safe(fd_num, thread_current());
   file_seek(fd_->file_info->file, fd_->pos);
   int offset = modify(fd_->file_info->file, buffer, size);
   fd_->pos += offset;
@@ -398,7 +368,7 @@ int file_modify(int fd_num, file_modify_func modify, const void *buffer, unsigne
   - Sets is_open to false
   - Removes the file if it was removed by another thread */
 static inline void kernel_close(int fd_num) {
-  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
+  struct fd *fd_ = thread_remove_fd(fd_num, thread_current());
   if (fd_ == NULL) {
     kernel_exit(-1);
   }
