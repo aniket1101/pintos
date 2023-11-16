@@ -5,8 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <user/syscall.h>
-#include "userprog/syscall.h"
 #include "userprog/process.h"
+#include "userprog/syscall.h"
+#include "userprog/pc_link.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -21,6 +22,9 @@
 #include "threads/vaddr.h"
 #include "devices/timer.h"
 #include "debug.h"
+#include "threads/malloc.h"
+#include "filesys/file.h"
+#include <hash.h>
 
 #define PUSH_ESP(val, type) \
   if_->esp -= sizeof(type); \
@@ -52,7 +56,7 @@ process_execute (const char *file_name)
 
   struct arg *arg = palloc_get_page(PAL_ZERO);
   if (arg == NULL) {
-    thread_exit();
+    kernel_exit(-1);
   }
 
   int i = 0;
@@ -86,7 +90,11 @@ start_process (void *file_name_)
   struct arg *arg = file_name_;
   struct intr_frame if_;
   bool success;
-
+  struct file *file = filesys_open(arg->v);
+  if (file != NULL) {
+    file_deny_write(file);
+    thread_current()->file = file;
+  }
   PUTBUF("Starting process");
 
   /* Initialize interrupt frame and load executable. */
@@ -99,7 +107,7 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   if (!success) {
     PUTBUF("Load failed");
-    thread_exit();
+    kernel_exit(-1);
   } 
 
   push_args(&if_, arg);
@@ -119,7 +127,7 @@ start_process (void *file_name_)
 /* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
 void push_args(struct intr_frame *if_, const struct arg *arg) {
   if (if_->esp != PHYS_BASE) {
-    thread_exit();
+    kernel_exit(-1);
   }
 
   PUTBUF("Push args onto stack:");
@@ -194,9 +202,12 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   PUTBUF_FORMAT("\tesp at %p", if_->esp);
 
   if (if_->esp < PHYS_BASE - PGSIZE) { // Stack overflow has occurred
-    thread_exit();
+    PUTBUF_FORMAT("\tEXIT!!! Stack overflow with esp at %p", if_->esp); 
+    kernel_exit(-1);
   }
 }
+
+
 
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
@@ -210,8 +221,33 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
 int
 process_wait (tid_t child_tid) 
 {
-  timer_sleep(600);
-  return child_tid;
+  if (child_tid == TID_ERROR) {
+    return TID_ERROR;
+  }
+
+  struct pc_link *link = pc_link_lookup(child_tid);
+
+  // Direct child or already waiting
+  if (link != NULL && link->parent_tid != thread_tid()) { 
+    return TID_ERROR;
+  }
+
+  // Child exit code is already available
+  if (link == NULL || link->child_alive) {
+    // Running kernel thread is waiting on some other thread
+    if (thread_tid() == 1) {
+      link = pc_link_init(child_tid);
+    } else if (link == NULL) {
+      return TID_ERROR;
+    }
+  }
+
+  sema_down(&link->waiter);
+
+  int exit_code = link->child_exit_code;
+  pc_link_remove(link);
+  pc_link_free(&link->elem, NULL);
+  return exit_code;
 }
 
 /* Free the current process's resources. */
@@ -219,6 +255,18 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  struct pc_link *link = pc_link_lookup(thread_tid());
+  if (cur->file != NULL) {
+    file_close(cur->file);
+  }
+
+  if (link != NULL) {
+    pc_link_kill_child(link, thread_current());
+    PUTBUF_FORMAT("Child %s with pid = %d has exited with exit code %d. "
+      "Stop waiting", thread_name(), thread_tid(), thread_current()->exit_code);
+  }
+  pc_link_free_parents(thread_tid());
+
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back

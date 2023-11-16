@@ -2,6 +2,7 @@
 #define THREADS_THREAD_H
 
 #include <debug.h>
+#include <hash.h>
 #include <list.h>
 #include <stdint.h>
 #include "fixed-point.h"
@@ -112,7 +113,8 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;               /* Page directory. */
     int exit_code;                   /* Exit code. */
-    struct list fds;                /* List of fds thread knows*/
+    struct hash fds;                /* List of fds thread knows*/
+    struct file *file;
 #endif
 
     /* Owned by thread.c. */

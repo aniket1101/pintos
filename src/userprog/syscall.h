@@ -1,21 +1,10 @@
-#include <list.h>
-#include "filesys/off_t.h"
-
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 
+#include <debug.h>
+
 void syscall_init (void);
 void *check_pointer(void *ptr);
-
-struct fd_elem {
-    struct list_elem elem;
-    int fd;
-    off_t offset;
-};
-
-struct thread_fd_elem {
-    struct list_elem elem;
-    int fd;
-};
+void kernel_exit(int status) NO_RETURN; 
 
 #endif /* userprog/syscall.h */

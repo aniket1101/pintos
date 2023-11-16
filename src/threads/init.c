@@ -24,6 +24,8 @@
 #include "threads/thread.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "userprog/pc_link.h"
+#include "userprog/fd.h"
 #include "userprog/exception.h"
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
@@ -40,6 +42,7 @@
 #include "filesys/filesys.h"
 #include "filesys/fsutil.h"
 #endif
+#include "userprog/debug.h"
 
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
@@ -72,6 +75,8 @@ static void usage (void);
 static void locate_block_devices (void);
 static void locate_block_device (enum block_type, const char *name);
 #endif
+
+struct hash thread_table;
 
 int main (void) NO_RETURN;
 
@@ -135,11 +140,15 @@ main (void)
   swap_init ();
 #endif
 
+  hash_init(pc_link_get_hash_table(), &tid_func, &tid_less, NULL);
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */
   run_actions (argv);
 
+  hash_destroy(pc_link_get_hash_table(), &pc_link_free);
+  hash_destroy(file_info_get_hash_table(), &file_info_free);
+  
   /* Finish up. */
   shutdown ();
   thread_exit ();

@@ -2,6 +2,7 @@
 #define USERPROG_PROCESS_H
 
 #include "threads/thread.h"
+#include "threads/init.h"
 #define WORD_SIZE 4
 
 tid_t process_execute (const char *file_name);
