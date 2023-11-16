@@ -24,6 +24,7 @@
 #include "threads/thread.h"
 #ifdef USERPROG
 #include "userprog/process.h"
+#include "userprog/pc_link.h"
 #include "userprog/exception.h"
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"

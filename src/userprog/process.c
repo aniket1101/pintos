@@ -5,8 +5,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <user/syscall.h>
-#include "userprog/syscall.h"
 #include "userprog/process.h"
+#include "userprog/syscall.h"
+#include "userprog/pc_link.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -39,8 +40,6 @@ struct arg {
 
 static void push_args(struct intr_frame *if_, const struct arg *arg);
 
-int return_c_exit_code(struct parent_child *p_c);
-
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -57,7 +56,7 @@ process_execute (const char *file_name)
 
   struct arg *arg = palloc_get_page(PAL_ZERO);
   if (arg == NULL) {
-    thread_exit();
+    // kernel_exit(-1);
   }
 
   int i = 0;
@@ -108,7 +107,7 @@ start_process (void *file_name_)
   /* If load failed, quit. */
   if (!success) {
     PUTBUF("Load failed");
-    thread_exit();
+    kernel_exit(-1);
   } 
 
   push_args(&if_, arg);
@@ -128,7 +127,7 @@ start_process (void *file_name_)
 /* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
 void push_args(struct intr_frame *if_, const struct arg *arg) {
   if (if_->esp != PHYS_BASE) {
-    thread_exit();
+    kernel_exit(-1);
   }
 
   PUTBUF("Push args onto stack:");
@@ -203,17 +202,12 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   PUTBUF_FORMAT("\tesp at %p", if_->esp);
 
   if (if_->esp < PHYS_BASE - PGSIZE) { // Stack overflow has occurred
-    thread_exit();
+    PUTBUF_FORMAT("\tEXIT!!! Stack overflow with esp at %p", if_->esp); 
+    kernel_exit(-1);
   }
 }
 
-// Helper function for wait to free an element once used
-int return_c_exit_code(struct parent_child *link) {
-  int e_c = link->c_exit_code;
-  hash_delete(get_thread_table(), &(link->h_elem));
-  free(link);
-  return e_c;
-}
+
 
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
@@ -227,68 +221,51 @@ int return_c_exit_code(struct parent_child *link) {
 int
 process_wait (tid_t child_tid) 
 {
-  PUTBUF("in wait");
   if (child_tid == TID_ERROR) {
     return TID_ERROR;
   }
 
-  struct parent_child *link = get_p_c(child_tid);
-  int p_tid = thread_tid();
+  struct pc_link *link = pc_link_find(child_tid);
 
-  // Direct child
-  if (link != NULL && link->p_tid != p_tid) { 
+  // Direct child or already waiting
+  if (link != NULL && link->p_tid != thread_tid()) { 
     return TID_ERROR;
   }
-
+    
   // Child exit code is already available
-  if (link != NULL && !link->c_is_alive) { 
-    return return_c_exit_code(link);
-  }
-
-  // Running kernel thread is waiting on some other thread
-  if (thread_tid() == 1) {
-    link = (struct parent_child *) malloc (sizeof(struct parent_child));
-
-    if (link == NULL) { // malloc error
+  if (link == NULL || link->c_is_alive) {
+    // Running kernel thread is waiting on some other thread
+    if (thread_tid() == 1) {
+      link = pc_link_init(child_tid);
+    } else if (link == NULL) {
       return TID_ERROR;
     }
-
-    link->p_tid = p_tid;
-    link->p_is_alive = true;
-    link->c_tid = child_tid;
-    link->c_is_alive = true;
-    sema_init(&(link->waiter), 0);
-    hash_insert(get_thread_table(), &(link->h_elem));
-  } 
-  // Thread is not the running kernel thread and has called wait without exec
-  if (link == NULL) {
-    return TID_ERROR;
   }
 
   sema_down(&link->waiter);
-  return return_c_exit_code(link);
+
+  int exit_code = link->c_exit_code;
+  pc_link_free(link);
+  return exit_code;
 }
-
-
 
 /* Free the current process's resources. */
 void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
-  struct parent_child *link = get_p_c(thread_tid());
+  struct pc_link *link = pc_link_find(thread_tid());
   if (cur->file != NULL) {
     file_close(cur->file);
   }
-  if(link != NULL) {
-    PUTBUF_FORMAT("EXIT CODE IS SET to %d", thread_current()->exit_code);
 
-    link->c_exit_code = thread_current()->exit_code;
-    PUTBUF("EXIT CODE IS SET");
-    link->c_is_alive = false;
-    sema_up(&link->waiter);
+  if (link != NULL) {
+    pc_link_kill_child(link, thread_current());
+    PUTBUF_FORMAT("Child %s with pid = %d has exited with exit code %d. "
+      "Stop waiting", thread_name(), thread_tid(), thread_current()->exit_code);
   }
   free_parents(thread_tid());
+
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back

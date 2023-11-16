@@ -60,6 +60,8 @@ userprog_SRC += userprog/exception.c	# User exception handler.
 userprog_SRC += userprog/syscall.c	# System call handler.
 userprog_SRC += userprog/gdt.c		# GDT initialization.
 userprog_SRC += userprog/tss.c		# TSS management.
+userprog_SRC += userprog/pc_link.c  # Parent-child link
+userprog_SRC += userprog/fd.c  # Fd handling
 
 # Virtual memory code.
 vm_SRC += devices/swap.c		# Swap block manager.

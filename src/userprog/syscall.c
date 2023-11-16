@@ -2,28 +2,23 @@
 #include <string.h>
 #include <stdio.h>
 #include <list.h>
+#include <debug.h>
 #include <user/syscall.h>
 #include "userprog/syscall.h"
+#include "userprog/pc_link.h"
+#include "userprog/fd.h"
 #include "userprog/process.h"
 #include "userprog/pagedir.h"
 #include "userprog/debug.h"
-#include "threads/thread.h"
-#include "threads/synch.h"
 #include "threads/interrupt.h"
 #include "threads/vaddr.h"
-#include "threads/malloc.h"
 #include "devices/timer.h"
 #include "devices/shutdown.h"
 #include "devices/input.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
-#include "debug.h"
 
-#define MAX_SIZE 100
-#define MAX_FILENAME_SIZE 14
-
-typedef void * (*elemFunc) (struct list_elem *, struct list_elem *);
-typedef void * (*infoFunc) (struct list_elem *, void *);
+#define EXIT_BUF_SIZE 30
 
 #define pop_stack(esp, type) *((type *) check_pointer(esp))
 #define pop_arg(argnum, type) pop_stack(f->esp + ((argnum + 1) * WORD_SIZE), type)
@@ -57,6 +52,9 @@ static inline int kernel_read (int fd, void *buffer, unsigned length);
 static inline int kernel_write (int fd, const void *buffer, unsigned length);
 static inline void kernel_close (int fd);
 
+typedef int (file_modify_func)(struct file *, const void *, off_t);
+static off_t file_modify(int fd, file_modify_func modify, const void *buffer, unsigned size);
+
 typedef void (*handler_func)(struct intr_frame *f); 
 handler_func handlers[NUM_SYSCALLS] = {
   &handle_halt, 
@@ -74,109 +72,17 @@ handler_func handlers[NUM_SYSCALLS] = {
   &handle_close
 }; 
 
-struct file_info {
-	struct list *fds;
-	struct file *file;
-  char *name;
-	bool to_remove;
-  bool is_open;
-	struct list_elem elem;
-};
-
-struct function_info {
-  int fd;
-  elemFunc funct;
-};
-
-void *rem_fd(struct list_elem *, struct list_elem *);
-void remove_fd(int);
-
-void *fd_apply(int, elemFunc);
-bool is_fd_valid(int);
-
-void *traverse_fds(struct list_elem *, void *);
-void *traverse_all_files(void *, void *);
-
-struct thread_fd_elem *find_fd_elem(int);
-
-void init_fd_elem(struct fd_elem *);
-
-struct file *fd_to_file(int);
-
-void *get_info_file(struct list_elem *, struct list_elem * UNUSED);
-
-void init_file_info(struct file_info *, int, struct file *);
-void make_file_info(struct file_info *, char name[MAX_FILENAME_SIZE]);
-struct file_info *get_file_info(struct list_elem *, void *);
-struct file_info *find_file_info(const char *);
-struct file_info *fd_to_file_info (int);
-void set_pos(int fd);
-void upd_pos(int fd);
-void *get_fd(struct list_elem *info, struct list_elem *f_elem);
-
-static struct list all_files;
-
-static int32_t next_fd;
-
-bool tid_less(const struct hash_elem *a,
-                              const struct hash_elem *b,
-                              void *aux UNUSED) {
-  return hash_entry(a, struct parent_child, h_elem)->c_tid
-    < hash_entry(b, struct parent_child, h_elem)->c_tid;
-}
-
-unsigned tid_func(const struct hash_elem *e, void *aux UNUSED) {
-  return hash_entry(e, struct parent_child, h_elem)->c_tid;
-}
-
-void free_table(struct hash_elem *e, void *aux UNUSED) {
-  free(hash_entry(e, struct parent_child, h_elem));
-}
-
-void upd_pos(int fd) {
-  // validity has already been checked
-  struct file_info *info = fd_to_file_info(fd);
-  struct fd_elem *f_elem = (struct fd_elem *) fd_apply(fd, &get_fd);
-  f_elem->offset = file_tell(info->file);
-}
-
-
-void set_pos(int fd) {
-  // validity has already been checked
-  struct file_info *info = fd_to_file_info(fd);
-  struct fd_elem *f_elem = (struct fd_elem *) fd_apply(fd, &get_fd);
-  file_seek(info->file, f_elem->offset);
-}
-
-struct parent_child *get_p_c(int c_tid) {
-  struct hash *hash = get_thread_table();
-  if (!hash_empty(hash)) {
-    struct hash_iterator i;
-
-    hash_first (&i, hash);
-    while (hash_next (&i)) {
-        struct parent_child *link = hash_entry (hash_cur (&i), struct parent_child, h_elem);
-        if (link->c_tid == c_tid) {
-          return link;
-        }
-    }
-  }
-  return NULL;
-}
-
 void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
-  // lock_init(fd_lock);
-  next_fd = 2;
-  list_init(&all_files);
+  fd_system_init();
 }
 
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  PUTBUF("Start syscall:");
+  PUTBUF("Handle syscall:");
   HEX_DUMP_ESP(f->esp);  
 
   int syscall_num = pop_stack(f->esp, int);
@@ -267,12 +173,13 @@ static void handle_open(struct intr_frame *f UNUSED) {
    size of the file with the specified fd */
 static void handle_filesize(struct intr_frame *f UNUSED) {
   PUTBUF("Call filesize syscall");
-  int fd = pop_arg(0, int);
-  if (!is_fd_valid(fd)) {
+  int fd_num = pop_arg(0, int);
+  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
+  if (fd_ == NULL) {
     kernel_exit(-1);
   }
 
-  f->eax = file_length(fd_to_file(fd));
+  f->eax = file_length(fd_->file_info->file);
 }
 
 /* Wrapper for kernel_write() */
@@ -299,25 +206,30 @@ static void handle_write(struct intr_frame *f) {
 /* Implements the seek system call by changing the file's position */
 static void handle_seek(struct intr_frame *f UNUSED) {
   PUTBUF("Call seek syscall");
-  int fd = pop_arg(0, int);
+  int fd_num = pop_arg(0, int);
   unsigned position = pop_arg(1, unsigned);
 
-  if (!is_fd_valid(fd)) {
+  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
+  if (fd_ == NULL) {
     kernel_exit(-1);
   }
-  file_seek(fd_to_file(fd), position);
-  upd_pos(fd);
+
+  file_seek(fd_->file_info->file, position);
+  fd_->pos = file_tell(fd_->file_info->file);
 }
 
 /* Implements the tell system call by returning the file's position */
 static void handle_tell(struct intr_frame *f UNUSED) {
   PUTBUF("Call tell syscall");
-  int fd = pop_arg(0, int);
-  if (!is_fd_valid(fd)) {
+  int fd_num = pop_arg(0, int);
+
+  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
+  if (fd_ == NULL) {
     kernel_exit(-1);
   }
-  set_pos(fd);
-  f->eax = file_tell(fd_to_file(fd));
+  
+  file_seek(fd_->file_info->file, fd_->pos);
+  f->eax = file_tell(fd_->file_info->file);
 }
 
 /* Wrapper for kernel_close() */
@@ -333,9 +245,9 @@ static void handle_close(struct intr_frame *f UNUSED) {
 - Setting the thread's exit code to the status
 - Outputting a message with the exit code to the terminal */
 void kernel_exit(int status) {
-  char buf[MAX_SIZE]; int cnt;
+  char buf[EXIT_BUF_SIZE]; int cnt;
   thread_current()->exit_code = status;
-  cnt = snprintf(buf, MAX_SIZE, "%s: exit(%d)\n", 
+  cnt = snprintf(buf, EXIT_BUF_SIZE, "%s: exit(%d)\n", 
     thread_current()->name, status);
   putbuf(buf, cnt);
 
@@ -353,37 +265,22 @@ static inline pid_t kernel_wait(pid_t pid) {
   - Executing the process called in cmd_line
   - Returning the returned pid */  
 static inline pid_t kernel_exec(const char* cmd_line) {
-  pid_t p_tid = thread_tid();
-  PUTBUF_FORMAT("Execute command: %s", cmd_line);
+  PUTBUF_FORMAT("\tExecute command: %s", cmd_line);
   pid_t pid = ((pid_t) process_execute(cmd_line));
-  PUTBUF_FORMAT("after executing, pid is %d", pid);
+  PUTBUF_FORMAT("\tExec pid is %d", pid);
 
-  struct parent_child *exists_already = get_p_c(pid);
-  if (pid == TID_ERROR || exists_already != NULL) {
-    PUTBUF("TID error");
+  struct pc_link *link = pc_link_find(pid);
+  if (pid == TID_ERROR || link != NULL) {
+    PUTBUF("\tTID error: exit(-1)");
     return TID_ERROR;
   }
 
+  link = pc_link_init(pid);
 
-  struct parent_child *link = (struct parent_child *) malloc
-                                              (sizeof(struct parent_child));
-  PUTBUF("made link");
-  if (link != NULL) {
-
-    PUTBUF_FORMAT("pid is %d", pid);
-
-    link->p_tid = p_tid;
-    link->p_is_alive = true;
-    link->c_tid = pid;
-    link->c_is_alive = true;
-    sema_init(&(link->waiter), 0);
-    PUTBUF("inserting to hash");
-    hash_insert(get_thread_table(), &(link->h_elem));
-    PUTBUF_FORMAT("hash size is %d", hash_size(get_thread_table()));
-    PUTBUF_FORMAT("c_tid is %d", get_p_c(pid)->c_tid);
+  if (!link->c_is_alive) { //TODO: wait until start_process finished
+    return link->c_exit_code;
   }
 
-  PUTBUF_FORMAT("returning pid %d", pid);
   return pid;
 }
 
@@ -394,10 +291,7 @@ static inline pid_t kernel_exec(const char* cmd_line) {
 static inline bool kernel_create(const char *file, unsigned initial_size) {
   if (filesys_create(file, (off_t) initial_size) && 
       strlen(file) <= MAX_FILENAME_SIZE) {
-    struct file_info *info = (struct file_info *) malloc(sizeof(struct file_info));
-    make_file_info(info, (char *) file);
-    list_push_back(&all_files, &(info->elem));
-    return true;
+    return file_info_init((char *) file) != NULL;
   }
   
   return false;
@@ -407,13 +301,14 @@ static inline bool kernel_create(const char *file, unsigned initial_size) {
   - Getting the file_info struct of the file with the specified name
   - Sets to_remove to true
   - Deletes the file if the file is closed */
-static inline bool kernel_remove(const char *file) {
-  struct file_info *info = find_file_info(file);
+static inline bool kernel_remove(const char *file_name) {
+  struct file_info *info = file_info_lookup((char *) file_name);
   
   if (info != NULL) {
-    info->to_remove = true;  
-    if (!info->is_open) {
-      return filesys_remove(file);
+    info->should_remove = true;
+
+    if (info->num_fds == 0) {
+      return filesys_remove(file_name);
     }
   }
 
@@ -430,41 +325,27 @@ static inline int kernel_open(const char* file_name) {
     return -1;
   }
 
-  struct file_info *info = find_file_info(file_name);
+  struct file_info *info = file_info_lookup((char *) file_name);
   
   // If file has not been created
   if (info == NULL) {
-    info = (struct file_info *) malloc(sizeof(struct file_info));
-    
+    info = file_info_init((char *) file_name);
+    if (info == NULL) {
+      return -1;
+    }
+  }
+
+  if (info->num_fds == 0) {
     struct file *file = filesys_open(file_name);
     if (file == NULL) {
       return -1;
     }
 
     info->file = file;
-
-    // Need to have file in our list
-    make_file_info(info, (char *) file_name);
-    info->file = file;
-    info->is_open = true;
-    
-    list_push_back(&all_files, &(info->elem));
   } 
 
-  if (!info->is_open) {
-    info->file = filesys_open(file_name);
-    info->is_open = true;
-  }  
-  
-  struct fd_elem *elem = (struct fd_elem *) malloc(sizeof(struct fd_elem));
-  init_fd_elem(elem);
-  list_push_back(info->fds, &(elem->elem));
-
-  struct thread_fd_elem *t_elem = (struct thread_fd_elem *) malloc(sizeof(struct fd_elem));
-  t_elem->fd = elem->fd;
-  list_push_back(&(thread_current()->fds), &(t_elem->elem));
-
-  return elem->fd;
+  struct fd *added_fd = thread_add_fd(info);
+  return added_fd == NULL ? -1 : added_fd->fd_num;
 }
 
 static inline int kernel_read(int fd, void *buffer, unsigned size) {
@@ -472,13 +353,15 @@ static inline int kernel_read(int fd, void *buffer, unsigned size) {
     return input_getc();
   }
 
-  if (!is_fd_valid(fd)) {
+  struct fd *fd_ = thread_fd_lookup(fd, thread_current());
+  if (fd_ == NULL) {
     kernel_exit(-1);
   }
-  set_pos(fd);
-  int bytes_read = file_read(fd_to_file(fd), buffer, size);
-  upd_pos(fd);
-  return bytes_read;
+
+  file_seek(fd_->file_info->file, fd_->pos);
+  int offset = file_read(fd_->file_info->file, buffer, size);
+  fd_->pos += offset;
+  return offset;
 }
 
 static inline int kernel_write(int fd, const void *buffer, unsigned size) {
@@ -486,212 +369,47 @@ static inline int kernel_write(int fd, const void *buffer, unsigned size) {
     putbuf((const char *) buffer, size);
     return size;
   }
-
-  if (!is_fd_valid(fd)) {
+  struct fd *fd_ = thread_fd_lookup(fd, thread_current());
+  if (fd_ == NULL) {
     kernel_exit(-1);
-  } 
-  
-  set_pos(fd);
-  int bytes_written = file_write(fd_to_file(fd), buffer, size);
-  upd_pos(fd);
-  return bytes_written;
+  }
+
+  file_seek(fd_->file_info->file, fd_->pos);
+  int offset = file_write(fd_->file_info->file, buffer, size);
+  fd_->pos += offset;
+  return offset;
+  // return file_modify(fd, &file_write, buffer, size);
+}
+
+int file_modify(int fd_num, file_modify_func modify, const void *buffer, unsigned size) {
+  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
+  if (fd_ == NULL) {
+    kernel_exit(-1);
+  }
+
+  file_seek(fd_->file_info->file, fd_->pos);
+  int offset = modify(fd_->file_info->file, buffer, size);
+  fd_->pos += offset;
+  return offset;
 }
 
 /* Implements the close system call by:
   - Removing the fd from the file's list of possible fds
   - Sets is_open to false
   - Removes the file if it was removed by another thread */
-static inline void kernel_close(int fd) {
-  if (!is_fd_valid(fd)) {
+static inline void kernel_close(int fd_num) {
+  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
+  if (fd_ == NULL) {
     kernel_exit(-1);
   }
 
-  struct file_info *info = fd_to_file_info(fd);
-  remove_fd(fd);
+  struct file_info *info = fd_->file_info; //TODO free fd
+  info->num_fds--;
 
-  if (list_empty(info->fds)) {
+  if (info->num_fds == 0) {
     file_close(info->file);
-    info->is_open = false;
-    if (info->to_remove) {
-      kernel_remove(info->name);
+    if (info->should_remove) {
+      filesys_remove(info->name);
     }
-  }
-}
-
-
-/* Sets up file_info struct when a file is created. Many fields aren't
-initialised because the file hasn't been opened yet. */
-void make_file_info(struct file_info *info, char name[MAX_FILENAME_SIZE]) {
-  struct list *fds = (struct list *) malloc(sizeof(struct list));
-  list_init(fds);
-  info->name = name;
-  info->to_remove = false;
-  info->is_open = false;
-  info->fds = fds;
-}
-
-/* Initialises an fd_elem struct */
-void init_fd_elem(struct fd_elem *elem) {
-  elem->offset = 0;
-  elem->fd = next_fd;
-  next_fd++;
-}
-
-/* Initialises the rest of file_info fields when a file is opened */
-void init_file_info(struct file_info *info, int fd, struct file *file) {
-  struct list fds;
-  list_init(&fds);
-  struct fd_elem el;
-  el.fd = fd;
-  list_push_back(&fds, &(el.elem));
-  info->fds = &fds;
-  info->to_remove = false;
-  info->file = file;
-}
-
-/* Returns the file_info struct of the file with the specified name */
-struct file_info *find_file_info(const char *file) {
-  return traverse_all_files(&get_file_info, (char *) file);
-}
-
-/* Helper for find_file_info. Checks the name of file_info struct and returns
-it if the file has the right name */
-struct file_info *get_file_info(struct list_elem *element, void *aux) {
-  struct file_info *info = list_entry(element, struct file_info, elem);
-  char *file = (char *) aux;
-  if (!strcmp(info->name, file)) {
-    return info;
-  }
-  return NULL;
-}
-
-/* Returns the file_info struct of the file with the specified fd */
-struct file_info *fd_to_file_info (int fd) {
-  return (struct file_info *) fd_apply(fd, &get_info_file);
-}
-
-/* Returns the file struct of the file with the specified fd */
-struct file *fd_to_file(int fd) {
-  return fd_to_file_info(fd)->file;
-}
-
-/* Helper for fd_to_fie_info. Returns the outer file_info struct from the 
-list_element struct */
-void *get_info_file(struct list_elem *file_elem, struct list_elem *fd_elem UNUSED) {
-  return (void *) list_entry(file_elem, struct file_info, elem);
-}
-
-/* Checks whether the current thread has access to the specified fd */
-bool is_fd_valid(int fd) {
-  return find_fd_elem(fd) != NULL;
-}
-
-/* Removes an fd from the file's possible fds and from the current threads' list
-of fds */
-void remove_fd(int fd) {
-  // Fds list in file_info
-  fd_apply(fd, &rem_fd);
-
-  // Fds list in thread
-  struct thread_fd_elem *t_elem = find_fd_elem(fd);
-  list_remove(&(t_elem->elem));
-  free(t_elem);
-}
-
-/* Helper for remove_fd. Removes an fd from the file's possible fds and removes
-the file if necessary */
-void *rem_fd(struct list_elem *file_elem, struct list_elem *fd_element) {
-  struct fd_elem *f_elem = list_entry(fd_element, struct fd_elem, elem);
-  list_remove(fd_element);
-  free(f_elem);
-
-  struct file_info *info = list_entry(file_elem, struct file_info, elem);
-  if (!info->is_open && info->to_remove) {
-    list_remove(file_elem);
-    free(info);
-  }
-  return NULL;
-}
-
-/* Returns the thread_fd_elem struct with the specified fd */
-struct thread_fd_elem *find_fd_elem(int fd) {
-  if (!list_empty(&(thread_current()->fds))) {
-    for (struct list_elem *curr = list_begin(&(thread_current()->fds)); 
-         curr != list_tail(&(thread_current()->fds)); curr = list_next(curr)) {
-      struct thread_fd_elem *elem = list_entry(curr, struct thread_fd_elem, elem);
-      if (fd == elem->fd) {
-        return elem;
-      }
-    }
-  }
-  return NULL;
-}
-
-void *traverse_all_files(void *func, void *aux) {
-  struct list_elem *curr;
-  infoFunc funct = (infoFunc) func;
-  if(!list_empty(&all_files)) {
-    for (curr = list_begin(&all_files); 
-       curr != list_tail(&all_files); curr = list_next(curr)) {
-      void *result = funct(curr, aux);
-      if (result != NULL) {
-        return result;
-      }
-    }
-  }
-  return NULL;
-}
-
-void *get_fd(struct list_elem *info UNUSED, struct list_elem *f_elem) {
-  return list_entry(f_elem, struct fd_elem, elem);
-}
-
-void *fd_apply(int fd, elemFunc func) {
-  struct function_info fun_info;
-  fun_info.fd = fd;
-  fun_info.funct = func;
-  return traverse_all_files (&traverse_fds, (void *) &fun_info);
-}
-
-void *traverse_fds(struct list_elem *curr, void *aux) {
-  struct file_info *info = list_entry(curr, struct file_info, elem);
-  struct list_elem *elem;
-  struct function_info *fun_info = (struct function_info *) aux;
-  if (!list_empty(info->fds)) {
-    for (elem = list_begin(info->fds); 
-        elem != list_tail(info->fds); elem = list_next(elem)) {
-      struct fd_elem *fd_el = list_entry(elem, struct fd_elem, elem);
-
-      if (fun_info->fd == fd_el->fd) {
-        return fun_info->funct(curr, elem);
-      }
-
-    }
-  }
-
-  return NULL;
-}
-
-void free_parents(int p_tid) {
-  struct hash *hash = get_thread_table();
-  struct parent_child *to_remove[MAX_SIZE];
-  int index = -1;
-  if (!hash_empty(hash)) {
-    struct hash_iterator i;
-    hash_first (&i, hash);
-
-    while (hash_next (&i)) {
-      struct parent_child *link = hash_entry (hash_cur (&i), struct parent_child, h_elem);
-    
-      if (link->p_tid == p_tid) {
-        to_remove[index + 1] = link;
-        index++;
-      }
-    }
-  }
-  for (int i = 0; i <= index; i++) {
-    struct parent_child *link = to_remove[i];
-    hash_delete(get_thread_table(), &(link->h_elem));
-    free(link);
   }
 }
