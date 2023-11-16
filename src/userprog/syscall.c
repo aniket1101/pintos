@@ -267,8 +267,8 @@ static inline pid_t kernel_exec(const char* cmd_line) {
 
   link = pc_link_init(pid);
 
-  if (!link->c_is_alive) { //TODO: wait until start_process finished
-    return link->c_exit_code;
+  if (!link->child_alive) { //TODO: wait until start_process finished
+    return link->child_exit_code;
   }
 
   return pid;

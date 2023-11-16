@@ -228,12 +228,12 @@ process_wait (tid_t child_tid)
   struct pc_link *link = pc_link_lookup(child_tid);
 
   // Direct child or already waiting
-  if (link != NULL && link->p_tid != thread_tid()) { 
+  if (link != NULL && link->parent_tid != thread_tid()) { 
     return TID_ERROR;
   }
 
   // Child exit code is already available
-  if (link == NULL || link->c_is_alive) {
+  if (link == NULL || link->child_alive) {
     // Running kernel thread is waiting on some other thread
     if (thread_tid() == 1) {
       link = pc_link_init(child_tid);
@@ -244,7 +244,7 @@ process_wait (tid_t child_tid)
 
   sema_down(&link->waiter);
 
-  int exit_code = link->c_exit_code;
+  int exit_code = link->child_exit_code;
   pc_link_free(link);
   return exit_code;
 }
