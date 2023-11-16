@@ -23,7 +23,6 @@ struct pc_link *pc_link_init(tid_t child_tid) {
   link->child_alive = true;
 
   hash_insert(&pc_link_hash_table, &link->elem);
-  PUTBUF_FORMAT("\tHash size is now %d", hash_size(pc_link_hash));
   
   sema_init(&(link->waiter), 0);
   

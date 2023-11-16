@@ -1,6 +1,8 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
+#include <stdio.h>
+
 // #define __DEBUG__
 // #define __HEX_DUMP__
 
