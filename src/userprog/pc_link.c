@@ -70,7 +70,7 @@ struct pc_link *pc_link_lookup(int child_tid) {
 }
 
 void pc_link_free_parents(int parent_tid) {
-  struct pc_link *to_remove[MAX_SIZE];
+  struct pc_link *to_remove[hash_size(&pc_link_hash_table)];
   int index = 0;
   
   if (!hash_empty(&pc_link_hash_table)) {
