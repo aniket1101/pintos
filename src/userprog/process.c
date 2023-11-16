@@ -119,15 +119,14 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  lock_filesys_access();
   success = load (arg->v, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   if (!success) {
-    unlock_filesys_access();
     load_error(arg);
   } 
 
+  lock_filesys_access();
   struct file *file = filesys_open(arg->v);
   unlock_filesys_access();
   if (file != NULL) {
@@ -238,8 +237,6 @@ static inline void push_args(struct intr_frame *if_, struct arg *arg) {
     load_error(arg);
   }
 }
-
-
 
 /* Waits for thread TID to die and returns its exit status. 
  * If it was terminated by the kernel (i.e. killed due to an exception), 
