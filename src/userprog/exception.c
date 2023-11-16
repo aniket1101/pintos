@@ -2,21 +2,10 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include "userprog/gdt.h"
+#include "userprog/syscall.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
-#define PHYS_BASE 0xC0000000
-#define call_exit()                                                      \
-        ({                                                               \
-          int retval;                                                    \
-          asm volatile                                                   \
-            ("pushl %[arg0]; pushl %[number]; int $0x30; addl $8, %%esp" \
-               : "=a" (retval)                                           \
-               : [number] "i" (1),                                       \
-                 [arg0] "g" (-1)                                         \
-               : "memory");                                              \
-          retval;                                                        \
-        })
+#include "threads/vaddr.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -158,8 +147,8 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
-  if (fault_addr == NULL || fault_addr >= (void *) PHYS_BASE) {  
-    call_exit(); 
+  if (fault_addr == NULL || fault_addr >= PHYS_BASE) {  
+		kernel_exit(-1);
   }
 
   /* To implement virtual memory, delete the rest of the function
