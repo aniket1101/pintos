@@ -83,6 +83,7 @@ void
 syscall_init (void) 
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  lock_init(&filesys_lock);
   fd_system_init();
 }
 
@@ -257,6 +258,7 @@ static inline pid_t kernel_wait(pid_t pid) {
   - Executing the process called in cmd_line
   - Returning the returned pid */  
 static inline pid_t kernel_exec(const char* cmd_line) {
+  lock_acquire(&filesys_lock);
   PUTBUF_FORMAT("\tExecute command: %s", cmd_line);
   pid_t pid = ((pid_t) process_execute(cmd_line));
   PUTBUF_FORMAT("\tExec pid is %d", pid);
@@ -264,6 +266,7 @@ static inline pid_t kernel_exec(const char* cmd_line) {
   struct pc_link *link = pc_link_lookup(pid);
   if (pid == TID_ERROR || link != NULL) {
     PUTBUF("\tTID error: exit(-1)");
+    lock_release(&filesys_lock);
     return TID_ERROR;
   }
 
@@ -272,7 +275,7 @@ static inline pid_t kernel_exec(const char* cmd_line) {
   if (!link->child_alive) { //TODO: wait until start_process finished
     return link->child_exit_code;
   }
-
+  lock_release(&filesys_lock);
   return pid;
 }
 
@@ -281,11 +284,14 @@ static inline pid_t kernel_exec(const char* cmd_line) {
   - Makes a file_info struct for the new file
   - Adding the struct to the list of files */
 static inline bool kernel_create(const char *file, unsigned initial_size) {
+  lock_acquire(&filesys_lock);
   if (filesys_create(file, (off_t) initial_size) && 
       strlen(file) <= MAX_FILENAME_SIZE) {
-    return file_info_init((char *) file) != NULL;
+    bool res = file_info_init((char *) file) != NULL;
+    lock_release(&filesys_lock);
+    return res;
   }
-  
+  lock_release(&filesys_lock);
   return false;
 }
 
@@ -294,6 +300,7 @@ static inline bool kernel_create(const char *file, unsigned initial_size) {
   - Sets to_remove to true
   - Deletes the file if the file is closed */
 static inline bool kernel_remove(const char *file_name) {
+  lock_acquire(&filesys_lock);
   struct file_info *info = file_info_lookup((char *) file_name);
   
   if (info != NULL) {
@@ -302,10 +309,14 @@ static inline bool kernel_remove(const char *file_name) {
     if (info->num_fds == 0) {
       file_info_remove(info);
       free(info);
-      return filesys_remove(file_name);
+      int res = filesys_remove(file_name);
+      lock_release(&filesys_lock);
+      return res;
     }
+    lock_release(&filesys_lock);
+    return true;
   }
-
+  lock_release(&filesys_lock);
   return false;
 }
 
@@ -318,6 +329,7 @@ static inline int kernel_open(const char* file_name) {
   if (!strcmp(file_name, "")) {
     return -1;
   }
+  lock_acquire(&filesys_lock);
 
   struct file_info *info = file_info_lookup((char *) file_name);
   
@@ -325,6 +337,7 @@ static inline int kernel_open(const char* file_name) {
   if (info == NULL) {
     info = file_info_init((char *) file_name);
     if (info == NULL) {
+      lock_release(&filesys_lock);
       return -1;
     }
   }
@@ -332,6 +345,7 @@ static inline int kernel_open(const char* file_name) {
   if (info->num_fds == 0) {
     struct file *file = filesys_open(file_name);
     if (file == NULL) {
+      lock_release(&filesys_lock);
       return -1;
     }
 
@@ -339,6 +353,8 @@ static inline int kernel_open(const char* file_name) {
   } 
 
   struct fd *added_fd = thread_add_fd(info);
+  lock_release(&filesys_lock);
+
   return added_fd == NULL ? -1 : added_fd->fd_num;
 }
 
@@ -347,7 +363,10 @@ static inline int kernel_read(int fd, void *buffer, unsigned size) {
     return input_getc();
   }
 
-  return file_modify(fd, &file_read, buffer, size);
+  lock_acquire(&filesys_lock);
+  int res = file_modify(fd, &file_read, buffer, size);
+  lock_release(&filesys_lock);
+  return res;
 }
 
 static inline int kernel_write(int fd, const void *buffer, unsigned size) {
@@ -355,8 +374,10 @@ static inline int kernel_write(int fd, const void *buffer, unsigned size) {
     putbuf((const char *) buffer, size);
     return size;
   }
-
-  return file_modify(fd, &file_write, buffer, size);
+  lock_acquire(&filesys_lock);
+  int res = file_modify(fd, &file_write, buffer, size);
+  lock_release(&filesys_lock);
+  return res;
 }
 
 static int file_modify(int fd_num, file_modify_func modify, const void *buffer, unsigned size) {
@@ -372,6 +393,7 @@ static int file_modify(int fd_num, file_modify_func modify, const void *buffer, 
   - Sets is_open to false
   - Removes the file if it was removed by another thread */
 static inline void kernel_close(int fd_num) {
+  lock_acquire(&filesys_lock);
   struct fd *fd_ = thread_fd_lookup_safe(fd_num, thread_current());
   thread_remove_fd(fd_, thread_current());
   
@@ -388,16 +410,13 @@ static inline void kernel_close(int fd_num) {
       free(info);
     }
   }
+  lock_release(&filesys_lock);
 }
 
 void lock_filesys_access(void) {
-  if(!lock_held_by_current_thread(&filesys_lock)) {
-    lock_acquire(&filesys_lock);
-  }
+  lock_acquire(&filesys_lock);
 }
 
 void unlock_filesys_access(void) {
-  if(!lock_held_by_current_thread(&filesys_lock)) {
-    lock_release(&filesys_lock);
-  }
+  lock_release(&filesys_lock);
 }
