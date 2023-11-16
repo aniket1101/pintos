@@ -119,14 +119,17 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+  lock_filesys_access();
   success = load (arg->v, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
   if (!success) {
+    unlock_filesys_access();
     load_error(arg);
   } 
 
   struct file *file = filesys_open(arg->v);
+  unlock_filesys_access();
   if (file != NULL) {
     file_deny_write(file);
     thread_current()->file = file;
@@ -418,6 +421,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  lock_filesys_access();
   file = filesys_open (file_name);
   if (file == NULL) 
     {
@@ -509,6 +513,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   file_close (file);
+  unlock_filesys_access();
   return success;
 }
 
