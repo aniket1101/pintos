@@ -380,7 +380,11 @@ static inline int kernel_write(int fd, const void *buffer, unsigned size) {
 }
 
 static int file_modify(int fd_num, file_modify_func modify, const void *buffer, unsigned size) {
-  struct fd *fd_ = thread_fd_lookup_safe(fd_num, thread_current());
+  struct fd *fd_ = thread_fd_lookup(fd_num, thread_current());
+  if (fd_ == NULL) {
+    lock_release(&filesys_lock);
+    kernel_exit(-1);
+  }
   file_seek(fd_->file_info->file, fd_->pos);
   int offset = modify(fd_->file_info->file, buffer, size);
   fd_->pos += offset;
