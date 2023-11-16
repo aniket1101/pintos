@@ -29,6 +29,9 @@
 
 #define NUM_SYSCALLS 13
 
+/* Ensuring that only one syscall can access the file system at a time. */
+static struct lock filesys_lock;
+
 static void syscall_handler (struct intr_frame *);
 
 static void handle_halt(struct intr_frame *f);
@@ -384,5 +387,17 @@ static inline void kernel_close(int fd_num) {
       file_info_remove(info);
       free(info);
     }
+  }
+}
+
+void lock_filesys_access(void) {
+  if(!lock_held_by_current_thread(&filesys_lock)) {
+    lock_acquire(&filesys_lock);
+  }
+}
+
+void unlock_filesys_access(void) {
+  if(!lock_held_by_current_thread(&filesys_lock)) {
+    lock_release(&filesys_lock);
   }
 }
