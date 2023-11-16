@@ -256,19 +256,11 @@ static inline pid_t kernel_wait(pid_t pid) {
 static inline pid_t kernel_exec(const char* cmd_line) {
   PUTBUF_FORMAT("\tExecute command: %s", cmd_line);
   pid_t pid = ((pid_t) process_execute(cmd_line));
-  PUTBUF_FORMAT("\tExec pid is %d", pid);
-
-  struct pc_link *link = pc_link_lookup(pid);
-  if (pid == TID_ERROR || link != NULL) {
-    PUTBUF("\tTID error: exit(-1)");
+  if (pid == TID_ERROR) {
     return TID_ERROR;
   }
 
-  link = pc_link_init(pid);
-
-  if (!link->child_alive) { //TODO: wait until start_process finished
-    return link->child_exit_code;
-  }
+  pc_link_init(pid);
 
   return pid;
 }

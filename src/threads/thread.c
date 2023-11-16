@@ -409,7 +409,6 @@ thread_exit (void)
 
 #ifdef USERPROG
   process_exit ();
-  hash_destroy(&thread_current()->fds, &fd_free);
 #endif
 
   /* Remove thread from all threads list, set our status to dying,

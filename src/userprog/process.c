@@ -7,6 +7,7 @@
 #include <user/syscall.h>
 #include "userprog/process.h"
 #include "userprog/syscall.h"
+#include "userprog/fd.h"
 #include "userprog/pc_link.h"
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
@@ -34,11 +35,14 @@ static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
 struct arg {
+  struct semaphore sema; 
+  bool start_failed; 
   int c;
   char v[];
 };
 
-static void push_args(struct intr_frame *if_, const struct arg *arg);
+static inline void push_args(struct intr_frame *if_, struct arg *arg);
+static void load_error(struct arg *arg) NO_RETURN;
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -48,16 +52,23 @@ tid_t
 process_execute (const char *file_name) 
 {
   tid_t tid;
+  const int size = strlen(file_name) + 1;
+
+  if (size >= PGSIZE) {
+    return TID_ERROR;
+  }
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  char fn_copy[strlen(file_name) + 1];
-  strlcpy (fn_copy, file_name, strlen(file_name) + 1);
+  char fn_copy[size];
+  strlcpy (fn_copy, file_name, size);
 
   struct arg *arg = palloc_get_page(PAL_ZERO);
   if (arg == NULL) {
     kernel_exit(-1);
   }
+  arg->start_failed = false;
+  sema_init(&arg->sema, 0);
 
   int i = 0;
   char *token, *save_ptr;
@@ -73,11 +84,21 @@ process_execute (const char *file_name)
     arg->c++;
   }
 
+  if ((size - 1) + (WORD_SIZE * (arg->c + 4)) >= PGSIZE) {
+    palloc_free_page (arg); 
+    return TID_ERROR;
+  }
+
   /* Create a new thread to execute FILE_NAME. */
   tid = thread_create (arg->v, PRI_DEFAULT, start_process, arg);
-  if (tid == TID_ERROR) {
+  sema_down(&arg->sema);
+
+  if (arg->start_failed) {
     palloc_free_page (arg); 
+    return TID_ERROR;
   }
+
+  palloc_free_page (arg); 
   return tid;
 }
 
@@ -90,11 +111,7 @@ start_process (void *file_name_)
   struct arg *arg = file_name_;
   struct intr_frame if_;
   bool success;
-  struct file *file = filesys_open(arg->v);
-  if (file != NULL) {
-    file_deny_write(file);
-    thread_current()->file = file;
-  }
+
   PUTBUF("Starting process");
 
   /* Initialize interrupt frame and load executable. */
@@ -106,28 +123,41 @@ start_process (void *file_name_)
 
   /* If load failed, quit. */
   if (!success) {
-    PUTBUF("Load failed");
-    kernel_exit(-1);
+    load_error(arg);
   } 
 
+  struct file *file = filesys_open(arg->v);
+  if (file != NULL) {
+    file_deny_write(file);
+    thread_current()->file = file;
+  }
+
   push_args(&if_, arg);
-  
-  palloc_free_page (arg);
+
+  sema_up(&arg->sema);
+
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+
   PUTBUF("Start by simulating interrupt return:");
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
 
+static void load_error(struct arg *arg) {
+  arg->start_failed = true;
+  sema_up(&arg->sema);
+  kernel_exit(-1);
+}
+
 /* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
-void push_args(struct intr_frame *if_, const struct arg *arg) {
+static inline void push_args(struct intr_frame *if_, struct arg *arg) {
   if (if_->esp != PHYS_BASE) {
-    kernel_exit(-1);
+    load_error(arg);
   }
 
   PUTBUF("Push args onto stack:");
@@ -202,8 +232,7 @@ void push_args(struct intr_frame *if_, const struct arg *arg) {
   PUTBUF_FORMAT("\tesp at %p", if_->esp);
 
   if (if_->esp < PHYS_BASE - PGSIZE) { // Stack overflow has occurred
-    PUTBUF_FORMAT("\tEXIT!!! Stack overflow with esp at %p", if_->esp); 
-    kernel_exit(-1);
+    load_error(arg);
   }
 }
 
@@ -226,18 +255,10 @@ process_wait (tid_t child_tid)
   }
 
   struct pc_link *link = pc_link_lookup(child_tid);
-
-  // Direct child or already waiting
-  if (link != NULL && link->parent_tid != thread_tid()) { 
-    return TID_ERROR;
-  }
-
-  // Child exit code is already available
-  if (link == NULL || link->child_alive) {
-    // Running kernel thread is waiting on some other thread
+  if (link == NULL) {
     if (thread_tid() == 1) {
       link = pc_link_init(child_tid);
-    } else if (link == NULL) {
+    } else {
       return TID_ERROR;
     }
   }
@@ -255,17 +276,21 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
-  struct pc_link *link = pc_link_lookup(thread_tid());
+  hash_destroy(&cur->fds, &fd_free);
+
   if (cur->file != NULL) {
+    file_allow_write(cur->file);
     file_close(cur->file);
   }
 
+  struct pc_link *link = pc_link_lookup(cur->tid);
   if (link != NULL) {
-    pc_link_kill_child(link, thread_current());
+    pc_link_kill_child(link, cur);
     PUTBUF_FORMAT("Child %s with pid = %d has exited with exit code %d. "
-      "Stop waiting", thread_name(), thread_tid(), thread_current()->exit_code);
+      "Stop waiting", cur->name, cur->tid, cur->exit_code);
   }
-  pc_link_free_parents(thread_tid());
+
+  pc_link_free_parents(cur->tid);
 
   uint32_t *pd;
 
