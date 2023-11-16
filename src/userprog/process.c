@@ -225,13 +225,13 @@ process_wait (tid_t child_tid)
     return TID_ERROR;
   }
 
-  struct pc_link *link = pc_link_find(child_tid);
+  struct pc_link *link = pc_link_lookup(child_tid);
 
   // Direct child or already waiting
   if (link != NULL && link->p_tid != thread_tid()) { 
     return TID_ERROR;
   }
-    
+
   // Child exit code is already available
   if (link == NULL || link->c_is_alive) {
     // Running kernel thread is waiting on some other thread
@@ -254,7 +254,7 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
-  struct pc_link *link = pc_link_find(thread_tid());
+  struct pc_link *link = pc_link_lookup(thread_tid());
   if (cur->file != NULL) {
     file_close(cur->file);
   }

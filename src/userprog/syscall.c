@@ -259,7 +259,7 @@ static inline pid_t kernel_exec(const char* cmd_line) {
   pid_t pid = ((pid_t) process_execute(cmd_line));
   PUTBUF_FORMAT("\tExec pid is %d", pid);
 
-  struct pc_link *link = pc_link_find(pid);
+  struct pc_link *link = pc_link_lookup(pid);
   if (pid == TID_ERROR || link != NULL) {
     PUTBUF("\tTID error: exit(-1)");
     return TID_ERROR;

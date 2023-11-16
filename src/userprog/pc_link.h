@@ -18,7 +18,7 @@ struct pc_link {
 };
 
 struct pc_link *pc_link_init(tid_t child_tid);
-struct pc_link *pc_link_find(int c_tid);
+struct pc_link *pc_link_lookup(int c_tid);
 void pc_link_kill_child(struct pc_link *link, struct thread *child);
 
 bool tid_less(const struct hash_elem *a, 

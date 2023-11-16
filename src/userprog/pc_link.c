@@ -49,7 +49,7 @@ void free_table(struct hash_elem *e, void *aux UNUSED) {
   free(hash_entry(e, struct pc_link, h_elem));
 }
 
-struct pc_link *pc_link_find(int c_tid) {
+struct pc_link *pc_link_lookup(int c_tid) {
   struct hash *hash = get_thread_table();
   if (!hash_empty(hash)) {
     struct hash_iterator i;
