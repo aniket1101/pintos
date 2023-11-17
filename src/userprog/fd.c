@@ -32,7 +32,7 @@ static bool fd_less(const struct hash_elem *a_, const struct hash_elem *b_,
   const struct fd *b = hash_entry (b_, struct fd, elem);
   return a->fd_num < b->fd_num;
 }
-#include "userprog/debug.h"
+
 struct fd *fd_add(struct file_info *info) {
   info->num_fds++;
 
