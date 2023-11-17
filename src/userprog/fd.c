@@ -9,6 +9,7 @@ static int total_fds; // Total number of fds created
 
 static hash_hash_func fd_hash;
 static hash_less_func fd_less;
+static hash_action_func fd_free;
 
 /* Initialise the fd system. */
 void fd_system_init(void) {
@@ -76,12 +77,15 @@ struct fd *fd_lookup_safe(int fd) {
 
 /* Remove fd from current thread's hashmap. Returns NULL if fails.*/
 struct fd *fd_remove(struct fd *fd_) {
-  struct hash_elem *removed_elem = hash_delete(&thread_current()->fds, &fd_->elem);
-  return removed_elem != NULL ? hash_entry (removed_elem, struct fd, elem) : NULL;
+  struct hash_elem *removed_elem 
+    = hash_delete(&thread_current()->fds, &fd_->elem);
+
+  return removed_elem != NULL ? 
+    hash_entry (removed_elem, struct fd, elem) : NULL;
 }
 
 /* Free function for fd_hash_destroy(). */
-void fd_free(struct hash_elem *h_elem, void *aux UNUSED) {
+static void fd_free(struct hash_elem *h_elem, void *aux UNUSED) {
   free(hash_entry (h_elem, struct fd, elem));
 }
 

@@ -148,10 +148,11 @@ page_fault (struct intr_frame *f)
   write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 	
-  if (user && (fault_addr == NULL || fault_addr >= PHYS_BASE)) {  
-		PUTBUF("page fault: exit(-1)");
-		kernel_exit(-1);
+  if (user) { // If user access has faulted, kill user process
+		check_pointer(fault_addr);
   }
+
+	// Otherwise crash kernel
 
   /* To implement virtual memory, delete the rest of the function
      body, and replace it with code that brings in the page to

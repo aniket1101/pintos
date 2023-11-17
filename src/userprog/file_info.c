@@ -10,6 +10,7 @@ struct lock file_info_lock;
 
 static hash_hash_func file_info_hash;
 static hash_less_func file_info_less;
+static hash_action_func file_info_free;
 
 void file_info_system_init(void) {
   lock_init(&file_info_lock);
@@ -87,7 +88,7 @@ struct file_info *file_info_remove(struct file_info *info) {
 }
 
 /* Free function for file_info_hash_destroy(). */
-void file_info_free(struct hash_elem *h_elem, void *aux UNUSED) {
+static void file_info_free(struct hash_elem *h_elem, void *aux UNUSED) {
   free(hash_entry (h_elem, struct file_info, elem));
 }
 

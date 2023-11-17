@@ -23,7 +23,6 @@ struct fd *fd_lookup(int fd);
 struct fd *fd_lookup_safe(int fd);
 struct fd *fd_remove(struct fd *fd_);
 
-hash_action_func fd_free;
 void fd_hash_destroy(void);
 
 #endif

@@ -10,7 +10,7 @@
 
 /* Struct to hold information about a created file. */
 struct file_info {
-  char *name; /* String confined to 14 chars. */
+  char *name; 									/* String confined to 14 chars. */
 	struct file *file;				  	/* File pointer. NULL until open() called. */	
 
   int num_fds;			            /* Number of fds pointing to this file. */
@@ -25,7 +25,6 @@ struct file_info *file_info_init(char name[MAX_FILENAME_SIZE]);
 struct file_info *file_info_lookup(char name[MAX_FILENAME_SIZE]);
 struct file_info *file_info_remove(struct file_info *info);
 
-hash_action_func file_info_free;
 void file_info_hash_destroy(void);
 
 #endif

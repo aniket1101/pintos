@@ -113,8 +113,8 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;               /* Page directory. */
     int exit_code;                   /* Exit code. */
-    struct hash fds;                /* List of fds thread knows*/
-    struct file *file;
+    struct hash fds;                 /* List of fds thread has created. */
+    struct file *file;               /* Pointer to executable file. */
 #endif
 
     /* Owned by thread.c. */
