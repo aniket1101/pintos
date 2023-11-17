@@ -276,20 +276,17 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+
+  lock_filesys_access();
   hash_destroy(&cur->fds, &fd_free);
+  unlock_filesys_access();
 
   if (cur->file != NULL) {
     file_allow_write(cur->file);
     file_close(cur->file);
   }
 
-  struct pc_link *link = pc_link_lookup(cur->tid);
-  if (link != NULL) {
-    pc_link_kill_child(link, cur);
-    PUTBUF_FORMAT("Child %s with pid = %d has exited with exit code %d. "
-      "Stop waiting", cur->name, cur->tid, cur->exit_code);
-  }
-
+  pc_link_kill_child(cur);
   pc_link_free_parents(cur->tid);
 
   uint32_t *pd;
