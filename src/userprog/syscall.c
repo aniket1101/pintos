@@ -357,8 +357,6 @@ static inline int kernel_open(const char* file_name) {
   return added_fd == NULL ? -1 : added_fd->fd_num;
 }
 
-/* Checks validity of input fd, if it is ok, then it will call file modify
-   to update the file position to the fd's postion, and call file_read. */
 static inline int kernel_read(int fd, void *buffer, unsigned size) {
   if (fd == STDIN_FILENO) {
     return input_getc();
@@ -368,9 +366,10 @@ static inline int kernel_read(int fd, void *buffer, unsigned size) {
 
   lock_acquire(&filesys_lock);
 
+  // Updates postion of file to the threads saved position
   file_seek(fd_->file_info->file, fd_->pos);
   int offset = file_read(fd_->file_info->file, buffer, size);
-  fd_->pos += offset;
+  fd_->pos += offset; // Updates saved position
 
   lock_release(&filesys_lock);
   return offset;
@@ -389,7 +388,7 @@ static inline int kernel_write(int fd, const void *buffer, unsigned size) {
   // Updates postion of file to the threads saved position
   file_seek(fd_->file_info->file, fd_->pos);
   int offset = file_write(fd_->file_info->file, buffer, size);
-  fd_->pos += offset;
+  fd_->pos += offset; // Updates saved position
 
   lock_release(&filesys_lock);
   return offset;
