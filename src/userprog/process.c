@@ -217,18 +217,12 @@ process_wait (tid_t child_tid)
   }
 
   struct pc_link *link = pc_link_lookup(child_tid);
-
   if (link == NULL) {
     // Kernel thread would not call exec, we would need to add it to our hash
     if (thread_tid() == 1) {
       link = pc_link_init(child_tid);
     } else {
-      // The child thread does not exist in the pc_link hash
-      return TID_ERROR;
-    }
-  } else {
-    // Link isn't null, we need to verify that the thread calling is the parent
-    if (link->parent_tid != thread_tid()) {
+      // A thread which is not the correct parent or wait has already been done
       return TID_ERROR;
     }
   }
