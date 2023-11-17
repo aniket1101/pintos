@@ -140,14 +140,15 @@ main (void)
   swap_init ();
 #endif
 
-  hash_init(pc_link_get_hash_table(), &tid_func, &tid_less, NULL);
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */
   run_actions (argv);
 
+#ifdef USERPROG
   hash_destroy(pc_link_get_hash_table(), &pc_link_free);
   hash_destroy(file_info_get_hash_table(), &file_info_free);
+#endif
   
   /* Finish up. */
   shutdown ();
