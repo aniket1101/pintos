@@ -19,10 +19,13 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 
+// Calculate offset from esp according to argument number
 #define arg_esp_offs(argnum, esp) (esp + ((argnum + 1) * WORD_SIZE))
 
-#define pop_var(esp, type) *((type *) check_pointer(esp))
-#define pop_arg(argnum, type) pop_var(arg_esp_offs(argnum, f->esp), type)
+#define pop_var(esp, type) *((type *) check_pointer(esp)) // Deference ptr
+
+// Pop argument with number argnum off the stack (ptr arguments need additional check)
+#define pop_arg(argnum, type) pop_var(arg_esp_offs(argnum, f->esp), type) 
 #define pop_ptr_arg(argnum, type) (type) check_pointer((void *) pop_arg(argnum, type))
 
 #define NUM_SYSCALLS 13
@@ -33,36 +36,24 @@ static struct lock filesys_lock;
 
 static void syscall_handler (struct intr_frame *);
 
-static void handle_halt(struct intr_frame *f);
-static void handle_exit(struct intr_frame *f);
-static void handle_exec(struct intr_frame *f);
-static void handle_wait(struct intr_frame *f);
-static void handle_create(struct intr_frame *f);
-static void handle_remove(struct intr_frame *f);
-static void handle_open(struct intr_frame *f);
-static void handle_filesize(struct intr_frame *f);
-static void handle_read(struct intr_frame *f);
-static void handle_write(struct intr_frame *f);
-static void handle_seek(struct intr_frame *f);
-static void handle_tell(struct intr_frame *f);
-static void handle_close(struct intr_frame *f);
+typedef void handle_func(struct intr_frame *f); 
 
-/* Syscall functions which have access to the kernel/
-   These are exclusively called by handle_ functions */
-static inline pid_t kernel_exec (const char *file);
-static inline int kernel_wait (pid_t);
-static inline bool kernel_create (const char *file, unsigned initial_size);
-static inline bool kernel_remove (const char *file);
-static inline int kernel_open (const char *file);
-static inline int kernel_read (int fd, void *buffer, unsigned length);
-static inline int kernel_write (int fd, const void *buffer, unsigned length);
-static inline void kernel_close (int fd);
+static handle_func handle_halt;
+static handle_func handle_exit;
+static handle_func handle_exec;
+static handle_func handle_wait;
+static handle_func handle_create;
+static handle_func handle_remove;
+static handle_func handle_open;
+static handle_func handle_filesize;
+static handle_func handle_read;
+static handle_func handle_write;
+static handle_func handle_seek;
+static handle_func handle_tell;
+static handle_func handle_close;
 
-typedef int (file_modify_func)(struct file *, const void *, off_t);
-static off_t file_modify(int fd, file_modify_func modify, const void *buffer, unsigned size);
-
-typedef void (*handler_func)(struct intr_frame *f); 
-handler_func handlers[NUM_SYSCALLS] = {
+/* Array of handler functions, indexed by syscall_num. */
+handle_func *handlers[NUM_SYSCALLS] = {
   &handle_halt, 
   &handle_exit, 
   &handle_exec, 
@@ -78,6 +69,17 @@ handler_func handlers[NUM_SYSCALLS] = {
   &handle_close
 }; 
 
+/* Syscall functions which have access to the kernel/
+   These are exclusively called by handle_ functions */
+static inline pid_t kernel_exec (const char *file);
+static inline int kernel_wait (pid_t);
+static inline bool kernel_create (const char *file, unsigned initial_size);
+static inline bool kernel_remove (const char *file);
+static inline int kernel_open (const char *file);
+static inline int kernel_read (int fd, void *buffer, unsigned length);
+static inline int kernel_write (int fd, const void *buffer, unsigned length);
+static inline void kernel_close (int fd);
+
 void
 syscall_init (void) 
 {
@@ -92,18 +94,17 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
-  PUTBUF("Handle syscall:");
   HEX_DUMP_ESP(f->esp);  
 
   int syscall_num = pop_var(f->esp, int);
-  PUTBUF_FORMAT("\tpopped syscall num = %d off at %p. moved stack up by %d", 
-    syscall_num, f->esp, sizeof(int *)); 
+  PUTBUF_FORMAT("Handle syscall %d:", syscall_num);
 
-  if (syscall_num < 0 || syscall_num >= NUM_SYSCALLS) {
+  // If syscall_num is invalid, exit
+  if (syscall_num < 0 || syscall_num >= NUM_SYSCALLS) { 
     kernel_exit(-1);
   } 
 
-  handlers[syscall_num](f);
+  handlers[syscall_num](f); // Call associated handler for syscall_num
 
   HEX_DUMP_ESP(f->esp);
   PUTBUF("End syscall");
@@ -116,6 +117,7 @@ void *check_pointer(void *ptr) {
     return ptr;
   } 
 
+  // If ptr is above (or equal to) PHYS_BASE or is unmapped, exit
   kernel_exit(-1);
 }
 
@@ -134,7 +136,7 @@ static void handle_exit(struct intr_frame *f) {
 }
 
 /* Wrapper for kernel_exec() */
-static void handle_exec(struct intr_frame *f UNUSED) {
+static void handle_exec(struct intr_frame *f) {
   PUTBUF("Call exec syscall");
   const char *cmd_line = pop_ptr_arg(0, const char *);
 
@@ -142,7 +144,7 @@ static void handle_exec(struct intr_frame *f UNUSED) {
 }
 
 /* Wrapper for kernel_wait() */
-static void handle_wait(struct intr_frame *f UNUSED) {
+static void handle_wait(struct intr_frame *f) {
   PUTBUF("Call wait syscall");
   pid_t pid = pop_arg(0, pid_t);
 
@@ -150,7 +152,7 @@ static void handle_wait(struct intr_frame *f UNUSED) {
 }
 
 /* Wrapper for kernel_create() */
-static void handle_create(struct intr_frame *f UNUSED) {
+static void handle_create(struct intr_frame *f) {
   PUTBUF("Call create syscall");
   const char *file = pop_ptr_arg(0, const char *);
   unsigned initial_size = pop_arg(1, unsigned);
@@ -159,7 +161,7 @@ static void handle_create(struct intr_frame *f UNUSED) {
 }
 
 /* Wrapper for kernel_remove() function */
-static void handle_remove(struct intr_frame *f UNUSED) {
+static void handle_remove(struct intr_frame *f) {
   PUTBUF("Call remove syscall");
   const char *file = pop_ptr_arg(0, const char *);
 
@@ -167,17 +169,16 @@ static void handle_remove(struct intr_frame *f UNUSED) {
 }
 
 /* Wrapper for kernel_open() */
-static void handle_open(struct intr_frame *f UNUSED) {
+static void handle_open(struct intr_frame *f) {
   PUTBUF("Call open syscall");
   const char *file_name = pop_ptr_arg(0, const char *);
 
   f->eax = kernel_open(file_name);
 }
 
-
 /* Implements the filesize system call by calculating the 
    size of the file with the specified fd */
-static void handle_filesize(struct intr_frame *f UNUSED) {
+static void handle_filesize(struct intr_frame *f) {
   PUTBUF("Call filesize syscall");
   int fd_num = pop_arg(0, int);
 
@@ -188,7 +189,7 @@ static void handle_filesize(struct intr_frame *f UNUSED) {
 }
 
 /* Wrapper for kernel_write() */
-static void handle_read(struct intr_frame *f UNUSED) {
+static void handle_read(struct intr_frame *f) {
   PUTBUF("Call read syscall");
   int fd = pop_arg(0, int);
   void *buffer = pop_ptr_arg(1, void *);
@@ -208,7 +209,7 @@ static void handle_write(struct intr_frame *f) {
 }
 
 /* Implements the seek system call by changing the file's position */
-static void handle_seek(struct intr_frame *f UNUSED) {
+static void handle_seek(struct intr_frame *f) {
   PUTBUF("Call seek syscall");
   int fd_num = pop_arg(0, int);
   unsigned position = pop_arg(1, unsigned);
@@ -222,7 +223,7 @@ static void handle_seek(struct intr_frame *f UNUSED) {
 }
 
 /* Implements the tell system call by returning the file's position */
-static void handle_tell(struct intr_frame *f UNUSED) {
+static void handle_tell(struct intr_frame *f) {
   PUTBUF("Call tell syscall");
   int fd_num = pop_arg(0, int);
 
@@ -235,7 +236,7 @@ static void handle_tell(struct intr_frame *f UNUSED) {
 }
 
 /* Wrapper for kernel_close() */
-static void handle_close(struct intr_frame *f UNUSED) {
+static void handle_close(struct intr_frame *f) {
   PUTBUF("Call close syscall");
   int fd = pop_arg(0, int);
   kernel_close(fd);
@@ -369,7 +370,16 @@ static inline int kernel_read(int fd, void *buffer, unsigned size) {
     return input_getc();
   }
 
-  return file_modify(fd, &file_read, buffer, size);
+  struct fd *fd_ = fd_lookup_safe(fd);
+
+  lock_acquire(&filesys_lock);
+
+  file_seek(fd_->file_info->file, fd_->pos);
+  int offset = file_read(fd_->file_info->file, buffer, size);
+  fd_->pos += offset;
+
+  lock_release(&filesys_lock);
+  return offset;
 }
 
 static inline int kernel_write(int fd, const void *buffer, unsigned size) {
@@ -378,23 +388,15 @@ static inline int kernel_write(int fd, const void *buffer, unsigned size) {
     return size;
   }
 
-  return file_modify(fd, &file_write, buffer, size);
-}
-
-static int file_modify(int fd_num, file_modify_func modify, const void *buffer, unsigned size) {
-  struct fd *fd_ = fd_lookup(fd_num);
-  if (fd_ == NULL) {
-    kernel_exit(-1);
-  }
+  struct fd *fd_ = fd_lookup_safe(fd);
 
   lock_acquire(&filesys_lock);
 
   file_seek(fd_->file_info->file, fd_->pos);
-  int offset = modify(fd_->file_info->file, buffer, size);
+  int offset = file_write(fd_->file_info->file, buffer, size);
   fd_->pos += offset;
 
   lock_release(&filesys_lock);
-
   return offset;
 }
 
