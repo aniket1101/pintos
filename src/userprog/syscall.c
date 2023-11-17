@@ -317,6 +317,11 @@ static inline int kernel_open(const char* file_name) {
   }
 
   struct file_info *info = file_info_lookup((char *) file_name);
+
+  // If file has been flagged to remove it cannot be opened
+  if (info != NULL && info->should_remove) {
+    return -1;
+  }
   
   // If file has not been created, create the file_info
   if (info == NULL) {
