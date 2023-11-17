@@ -34,11 +34,12 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+/* Struct to pass program information to start process */
 struct arg {
-  struct semaphore sema; 
-  bool start_failed; 
-  int c;
-  char v[];
+  bool start_failed;     /* Checks if loading file has failed. */ 
+  struct semaphore sema; /* Waits for start_process to finish. */ 
+  int c;                 /* Number of arguments. */
+  char v[];              /* String of arguments, separated by '\0'. */
 };
 
 static inline void push_args(struct intr_frame *if_, struct arg *arg);
@@ -49,56 +50,58 @@ static void load_error(struct arg *arg) NO_RETURN;
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *cmd_line) 
 {
   tid_t tid;
-  const int size = strlen(file_name) + 1;
-
-  if (size >= PGSIZE) {
+  const int size = strlen(cmd_line) + 1; // Calculate size of cmd_line
+  if (size >= PGSIZE) { // If cmd_line is larger than a single page, return -1
     return TID_ERROR;
   }
 
-  /* Make a copy of FILE_NAME.
+  /* Make a copy of cmd_line.
      Otherwise there's a race between the caller and load(). */
   char fn_copy[size];
-  strlcpy (fn_copy, file_name, size);
+  strlcpy (fn_copy, cmd_line, size);
 
-  struct arg *arg = palloc_get_page(PAL_ZERO);
-  if (arg == NULL) {
-    kernel_exit(-1);
+  struct arg *arg = palloc_get_page(PAL_ZERO); // Allocate page for args
+  if (arg == NULL) { // If palloc failed, return -1
+    return TID_ERROR;
   }
-  arg->start_failed = false;
-  sema_init(&arg->sema, 0);
 
-  int i = 0;
-  char *token, *save_ptr;
+  sema_init(&arg->sema, 0); // Initialise start_process waiting sema
+
+  int i = 0; // Index to iterate through arg->v
+  char *token, *save_ptr; // Helper variables for strtok_r
+  
   PUTBUF("Tokenize args:");
-  for (token = strtok_r (fn_copy, " ", &save_ptr);
-      token != NULL;
+  // Tokenize fn_copy by spaces
+  for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL;
       token = strtok_r (NULL, " ", &save_ptr)) {
 
+    // Copy token to correct position in arg->v
     strlcpy(arg->v + i, token, strlen(token) + 1);
     PUTBUF_FORMAT("\targ[%d] = %s", arg->c, arg->v + i);
     
-    i += strlen(token) + 1; 
-    arg->c++;
+    i += strlen(token) + 1; // Increment index by token size
+    arg->c++; // Increment number of arguments
   }
 
-  if ((size - 1) + (WORD_SIZE * (arg->c + 4)) >= PGSIZE) {
+  // If size of args is larger than single page, return -1
+  if (i + (WORD_SIZE * (arg->c + 4)) >= PGSIZE) {
     palloc_free_page (arg); 
     return TID_ERROR;
   }
 
-  /* Create a new thread to execute FILE_NAME. */
+  // Create a new thread to execute cmd_line
   tid = thread_create (arg->v, PRI_DEFAULT, start_process, arg);
-  sema_down(&arg->sema);
-
-  if (arg->start_failed) {
-    palloc_free_page (arg); 
-    return TID_ERROR;
+  
+  // Wait until start_process has finished exuting before returning 
+  sema_down(&arg->sema); 
+  if (arg->start_failed) { // If start_process() fails, return -1
+    tid = TID_ERROR;
   }
 
-  palloc_free_page (arg); 
+  palloc_free_page (arg);
   return tid;
 }
 
@@ -106,10 +109,10 @@ process_execute (const char *file_name)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *arg_)
 {
-  struct arg *arg = file_name_;
-  struct intr_frame if_;
+  struct arg *arg = arg_; // Cast void pointer to arg struct
+  struct intr_frame if_; 
   bool success;
 
   PUTBUF("Starting process");
@@ -121,22 +124,23 @@ start_process (void *file_name_)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (arg->v, &if_.eip, &if_.esp);
 
-  /* If load failed, quit. */
+  /* If load failed, return -1 from process_execute() and quit */
   if (!success) {
     load_error(arg);
   } 
 
   lock_filesys_access();
-  struct file *file = filesys_open(arg->v);
+  // Open executable and deny writing to it 
+  struct file *file = filesys_open(arg->v); 
   if (file != NULL) {
     file_deny_write(file);
     thread_current()->file = file;
   }
   unlock_filesys_access();
 
-  push_args(&if_, arg);
+  push_args(&if_, arg); // Push arguments onto the stack
 
-  sema_up(&arg->sema);
+  sema_up(&arg->sema); // Stop waiting for start_process() to finish
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -150,25 +154,26 @@ start_process (void *file_name_)
   NOT_REACHED ();
 }
 
+/* Ensure process_execute() returns -1 and quit. */
 static void load_error(struct arg *arg) {
   arg->start_failed = true;
   sema_up(&arg->sema);
-  kernel_exit(-1);
+  thread_exit();
 }
 
-/* Pushes arguments in v onto the stack and updates the stack pointer (esp)*/
+/* Push arguments in v onto the stack and update the stack pointer (esp)*/
 static inline void push_args(struct intr_frame *if_, struct arg *arg) {
-  if (if_->esp != PHYS_BASE) {
+  if (if_->esp != PHYS_BASE) { // If esp is invalid, quit
     load_error(arg);
   }
 
   PUTBUF("Push args onto stack:");
   PUTBUF_FORMAT("\tesp at PHYS_BASE = %p", if_->esp);
   
-  void *arg_ptrs[arg->c];
+  void *arg_ptrs[arg->c]; // Array to hold pointers to arg strings on the stack  
 
-  int index = 0;
   /* Push arguments on the stack */
+  int index = 0; // Index of arg->v string
   for (int i = 0; i < arg->c; i++) {
     int size = strlen(arg->v + index) + 1; // Get size of arg
 
@@ -183,7 +188,7 @@ static inline void push_args(struct intr_frame *if_, struct arg *arg) {
     index += size; // Continue to next string in arg->v
   }
 
-  /* Word align esp */
+  /* Word align the stack pointer */
   int alignment = ((uint32_t) if_->esp) % WORD_SIZE;
 
   PUTBUF_FORMAT("\tmoved stack down by %d for word alignment. now at %p",
@@ -233,7 +238,7 @@ static inline void push_args(struct intr_frame *if_, struct arg *arg) {
   HEX_DUMP_ESP(if_->esp);
   PUTBUF_FORMAT("\tesp at %p", if_->esp);
 
-  if (if_->esp < PHYS_BASE - PGSIZE) { // Stack overflow has occurred
+  if (if_->esp <= PHYS_BASE - PGSIZE) { // If stack overflow occurs, quit
     load_error(arg);
   }
 }
@@ -277,17 +282,18 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
 
-  fd_hash_destroy();
+  fd_hash_destroy(); // Destroy this thread's hash table of fds
 
   lock_filesys_access();
+  // Allow this executable to be written to
   if (cur->file != NULL) {
     file_allow_write(cur->file);
     file_close(cur->file);
   }
   unlock_filesys_access();
 
-  pc_link_kill_child(cur);
-  pc_link_free_parents(cur->tid);
+  pc_link_kill_child(cur); // Set associated pc_link struct's child exit code
+  pc_link_free_parents(cur->tid); // Free all pc_link structs cur is parent of
 
   uint32_t *pd;
 
