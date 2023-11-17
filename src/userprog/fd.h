@@ -8,8 +8,6 @@
 #include "threads/thread.h"
 #include "userprog/file_info.h"
 
-#define MAX_FILENAME_SIZE 14
-
 struct fd {
 	int fd_num; /* Number used by user processes to access file. */
 	off_t pos;  				 /* Current position in the file. */
