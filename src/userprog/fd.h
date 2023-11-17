@@ -11,10 +11,10 @@
 #define MAX_FILENAME_SIZE 14
 
 struct fd {
-	int fd_num;
-	off_t pos;
-	struct file_info *file_info;
-	struct hash_elem elem;
+	int fd_num; /* Number used by user processes to access file. */
+	off_t pos;  				 /* Current position in the file. */
+	struct file_info *file_info; /* File associated with fd. */
+	struct hash_elem elem; 		 /* Elem for hash table of fds. */
 };
 
 void fd_system_init(void);
@@ -25,7 +25,7 @@ struct fd *fd_lookup(int fd);
 struct fd *fd_lookup_safe(int fd);
 struct fd *fd_remove(struct fd *fd_);
 
-void fd_free(struct hash_elem *h_elem, void *aux UNUSED);
+hash_action_func fd_free;
 void fd_hash_destroy(void);
 
 #endif
