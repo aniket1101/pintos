@@ -233,8 +233,10 @@ process_wait (tid_t child_tid)
     }
   }
 
-  // Waits for child to terminate/exit
-  sema_down(&link->waiter);
+    // Checks if child exit code is already available, if not, call sema_down
+  if (link->child_alive) {
+    sema_down(&link->waiter);
+  }
 
   // Removes from the hash and free's pc_link struct as wait has completed
   int exit_code = link->child_exit_code;
