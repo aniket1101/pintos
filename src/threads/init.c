@@ -146,8 +146,8 @@ main (void)
   run_actions (argv);
 
 #ifdef USERPROG
-  hash_destroy(pc_link_get_hash_table(), &pc_link_free);
-  hash_destroy(file_info_get_hash_table(), &file_info_free);
+  pc_link_hash_destroy();
+  file_info_hash_destroy();
 #endif
   
   /* Finish up. */

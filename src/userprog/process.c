@@ -128,11 +128,11 @@ start_process (void *file_name_)
 
   lock_filesys_access();
   struct file *file = filesys_open(arg->v);
-  unlock_filesys_access();
   if (file != NULL) {
     file_deny_write(file);
     thread_current()->file = file;
   }
+  unlock_filesys_access();
 
   push_args(&if_, arg);
 
@@ -277,14 +277,14 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
 
-  lock_filesys_access();
-  hash_destroy(&cur->fds, &fd_free);
-  unlock_filesys_access();
+  fd_hash_destroy();
 
+  lock_filesys_access();
   if (cur->file != NULL) {
     file_allow_write(cur->file);
     file_close(cur->file);
   }
+  unlock_filesys_access();
 
   pc_link_kill_child(cur);
   pc_link_free_parents(cur->tid);

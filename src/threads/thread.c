@@ -301,7 +301,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
   #ifdef USERPROG
-    hash_init(&t->fds, &fd_hash, &fd_less, NULL);
+    fd_hash_init(t);
   #endif
   try_yield();  
   
