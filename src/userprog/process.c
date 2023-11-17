@@ -228,7 +228,7 @@ process_wait (tid_t child_tid)
     if (thread_tid() == 1) {
       link = pc_link_init(child_tid);
     } else {
-      // The child thread does not exist in the pc_link hash
+      // A wait has already been done or the child was not in the hash
       return TID_ERROR;
     }
   } else {
@@ -236,6 +236,7 @@ process_wait (tid_t child_tid)
     if (link->parent_tid != thread_tid()) {
       return TID_ERROR;
     }
+
   }
 
     // Checks if child exit code is already available, if not, call sema_down
