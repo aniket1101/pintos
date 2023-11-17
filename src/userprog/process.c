@@ -250,24 +250,30 @@ static inline void push_args(struct intr_frame *if_, struct arg *arg) {
 int
 process_wait (tid_t child_tid) 
 {
+  // If child_tid input is the error tid, we should not wait
   if (child_tid == TID_ERROR) {
     return TID_ERROR;
   }
 
   struct pc_link *link = pc_link_lookup(child_tid);
   if (link == NULL) {
+    // Kernel thread would not call exec, we would need to add it to our hash
     if (thread_tid() == 1) {
       link = pc_link_init(child_tid);
     } else {
+      // A thread which is not the correct parent or wait has already been done
       return TID_ERROR;
     }
   }
 
+  // Waits for child to terminate/exit
   sema_down(&link->waiter);
 
+  // Removes from the hash and free's pc_link struct as wait has completed
   int exit_code = link->child_exit_code;
   pc_link_remove(link);
   pc_link_free(&link->elem, NULL);
+
   return exit_code;
 }
 
