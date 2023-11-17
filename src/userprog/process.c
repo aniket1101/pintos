@@ -222,7 +222,7 @@ process_wait (tid_t child_tid)
     if (thread_tid() == 1) {
       link = pc_link_init(child_tid);
     } else {
-      // A thread which is not the correct parent or wait has already been done
+      // A wait has already been done or the child was not in the hash
       return TID_ERROR;
     }
   } else {
