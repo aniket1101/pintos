@@ -73,14 +73,12 @@ process_execute (const char *cmd_line)
   int i = 0; // Index to iterate through arg->v
   char *token, *save_ptr; // Helper variables for strtok_r
   
-  PUTBUF("Tokenize args:");
   // Tokenize fn_copy by spaces
   for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL;
       token = strtok_r (NULL, " ", &save_ptr)) {
 
     // Copy token to correct position in arg->v
     strlcpy(arg->v + i, token, strlen(token) + 1);
-    PUTBUF_FORMAT("\targ[%d] = %s", arg->c, arg->v + i);
     
     i += strlen(token) + 1; // Increment index by token size
     arg->c++; // Increment number of arguments
@@ -115,8 +113,6 @@ start_process (void *arg_)
   struct intr_frame if_; 
   bool success;
 
-  PUTBUF("Starting process");
-
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
@@ -149,7 +145,6 @@ start_process (void *arg_)
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
 
-  PUTBUF("Start by simulating interrupt return:");
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -167,9 +162,6 @@ static inline void push_args(struct intr_frame *if_, struct arg *arg) {
     load_error(arg);
   }
 
-  PUTBUF("Push args onto stack:");
-  PUTBUF_FORMAT("\tesp at PHYS_BASE = %p", if_->esp);
-  
   void *arg_ptrs[arg->c]; // Array to hold pointers to arg strings on the stack  
 
   /* Push arguments on the stack */
@@ -180,63 +172,32 @@ static inline void push_args(struct intr_frame *if_, struct arg *arg) {
     if_->esp -= size; // Decrease esp to make room to save arg
     strlcpy(if_->esp, arg->v + index, size); // Copy arg string onto stack
     arg_ptrs[i] = if_->esp; // Save ptr to arg
-    
-    PUTBUF_FORMAT("\tmoved stack down by %d. pushed %s onto stack at %p", 
-      sizeof(char) * size, arg->v + index, if_->esp);
-    HEX_DUMP_ESP(if_->esp);
 
     index += size; // Continue to next string in arg->v
   }
 
   /* Word align the stack pointer */
   int alignment = ((uint32_t) if_->esp) % WORD_SIZE;
-
-  PUTBUF_FORMAT("\tmoved stack down by %d for word alignment. now at %p",
-    alignment, if_->esp - alignment);
   
   if_->esp -= alignment; //Decrease by alignment
-  HEX_DUMP_ESP(if_->esp);
 
   /* Push a null pointer sentinel on the stack */
   PUSH_ESP(NULL, void *);
 
-  PUTBUF_FORMAT("\tmoved stack down by %d. "
-    "pushed NULL sentinel onto stack at %p", 
-    sizeof(NULL), if_->esp);
-  HEX_DUMP_ESP(if_->esp);
  
   /* Push pointers to arguments on the stack */
   for (int i = arg->c - 1; i >= 0; i--) {
     PUSH_ESP(arg_ptrs[i], void *); // Push saved pointer onto stack
-    
-    PUTBUF_FORMAT("\tmoved stack down by %d. "
-      "pushed pointer = %p to arg[%d] onto stack at %p", 
-      sizeof(void *), arg_ptrs[i], i, if_->esp);
-    HEX_DUMP_ESP(if_->esp);
   }
 
   /* Push first pointer on the stack */
-  PUTBUF_FORMAT("\tmoved stack down by %d. "
-    "pushed first pointer = %p onto stack at %p", 
-    sizeof(void*), if_->esp + sizeof(void *), if_->esp);
-
   PUSH_ESP(if_->esp + WORD_SIZE, void *); // Last pushed ptr is WORD_SIZE above
-  HEX_DUMP_ESP(if_->esp);
 
   /* Push the number of arguments on the stack */
   PUSH_ESP(arg->c, int);
 
-  PUTBUF_FORMAT("\tmoved stack down by %d. pushed argc = %d onto stack at %p", 
-    sizeof(int), arg->c, if_->esp);
-  HEX_DUMP_ESP(if_->esp);
-
   /* Push a fake return address on the stack */
   PUSH_ESP(NULL, void *);
-
-  PUTBUF_FORMAT("\tmoved stack down by %d. pushed fake return = %p onto stack at %p", 
-    sizeof(void *), NULL, if_->esp);
-  HEX_DUMP_ESP(if_->esp);
-  PUTBUF_FORMAT("\tesp at %p", if_->esp);
 
   if (if_->esp <= PHYS_BASE - PGSIZE) { // If stack overflow occurs, quit
     load_error(arg);
@@ -261,12 +222,18 @@ process_wait (tid_t child_tid)
   }
 
   struct pc_link *link = pc_link_lookup(child_tid);
+
   if (link == NULL) {
     // Kernel thread would not call exec, we would need to add it to our hash
     if (thread_tid() == 1) {
       link = pc_link_init(child_tid);
     } else {
-      // A thread which is not the correct parent or wait has already been done
+      // The child thread does not exist in the pc_link hash
+      return TID_ERROR;
+    }
+  } else {
+    // Link isn't null, we need to verify that the thread calling is the parent
+    if (link->parent_tid != thread_tid()) {
       return TID_ERROR;
     }
   }
