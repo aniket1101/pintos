@@ -225,6 +225,12 @@ process_wait (tid_t child_tid)
       // A thread which is not the correct parent or wait has already been done
       return TID_ERROR;
     }
+  } else {
+    // Link isn't null, we need to verify that the thread calling is the parent
+    if (link->parent_tid != thread_tid()) {
+      return TID_ERROR;
+    }
+
   }
 
     // Checks if child exit code is already available, if not, call sema_down
