@@ -14,12 +14,15 @@ void supp_page_table_destroy(struct hash *hash_table) {
 
 struct supp_page_table_elem *get_supp_page_table(struct hash *hash_table,
                                                               void *vaddr) {
-    return hash_find(hash_table, vaddr);
+    return hash_entry(hash_find(hash_table, vaddr),
+     struct supp_page_table_elem, elem);
 }
 
 struct supp_page_table_elem *insert_supp_page_table(struct hash *hash_table,
                                             struct supp_page_table_elem *elem) {
-    return hash_insert(hash_table, &elem->elem);
+    struct hash_elem *el = hash_insert(hash_table, &elem->elem);
+    return (el == NULL) ? NULL : hash_entry(el, struct supp_page_table_elem,
+     elem);
 }
 
 static unsigned supp_page_table_hash(const struct hash_elem *e, void *aux UNUSED) {
