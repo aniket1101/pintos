@@ -28,7 +28,7 @@
 #define pop_arg(argnum, type) pop_var(arg_esp_offs(argnum, f->esp), type) 
 #define pop_ptr_arg(argnum, type) (type) check_pointer((void *) pop_arg(argnum, type))
 
-#define NUM_SYSCALLS 13
+#define NUM_SYSCALLS 15
 #define EXIT_BUF_SIZE 30
 
 /* Ensuring that only one syscall can access the file system at a time. */
@@ -51,6 +51,8 @@ static handle_func handle_write;
 static handle_func handle_seek;
 static handle_func handle_tell;
 static handle_func handle_close;
+static handle_func handle_mmap;
+static handle_func handle_munmap;
 
 /* Array of handler functions, indexed by syscall_num. */
 handle_func *handlers[NUM_SYSCALLS] = {
@@ -66,7 +68,9 @@ handle_func *handlers[NUM_SYSCALLS] = {
   &handle_write, 
   &handle_seek, 
   &handle_tell, 
-  &handle_close
+  &handle_close,
+  &handle_mmap,
+  &handle_munmap
 }; 
 
 /* Syscall functions which have access to the kernel/
@@ -221,6 +225,15 @@ static void handle_tell(struct intr_frame *f) {
 static void handle_close(struct intr_frame *f) {
   int fd = pop_arg(0, int);
   kernel_close(fd);
+}
+
+/* Wrapper for kernel_mmap() */
+static void handle_mmap(struct intr_frame *f) {
+
+}
+
+static void handle_munmap(struct intr_frame *f) {
+  
 }
 
 /* Below are implementations of syscall functions with kernel access */ 
