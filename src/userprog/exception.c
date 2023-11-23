@@ -188,7 +188,7 @@ page_fault (struct intr_frame *f)
          break;
       }
       // TO DO: Note that writable should not always be true
-      pagedir_set_page(&curr->pagedir, vaddr, frame_addr, true);
+      pagedir_set_page(&curr->pagedir, vaddr, frame_addr, &curr->is_writable);
       page->status = LOADED;
    }
 
