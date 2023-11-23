@@ -12,6 +12,9 @@ static hash_less_func frame_table_less;
 static struct hash frame_table;
 static struct lock frame_lock;
 
+static void lock_frame_access(void);
+static void unlock_frame_access(void);
+
 void frame_init(struct hash *frame_table, struct lock *frame_lock) {
     hash_init(&frame_table, &frame_table_hash, &frame_table_less, NULL);
     lock_init(&frame_lock);
