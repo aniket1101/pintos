@@ -16,12 +16,13 @@ void frame_init(struct hash *frame_table, struct lock *frame_lock) {
     lock_init(&frame_lock);
 }
 
-void *frame_get_page(void *upage) {
+static void *frame_get_page(void *upage) {
     ASSERT(is_user_vaddr(upage));
 
     void *kpage = palloc_get_page(PAL_USER);
     if (kpage == NULL){
         // evict a frame
+        evict_frame(choose_frame());
         kpage = palloc_get_page(PAL_USER | PAL_ZERO);
         ASSERT(kpage != NULL);
     };
@@ -39,6 +40,24 @@ void *frame_get_page(void *upage) {
     }
 
     return kpage;
+}
+
+static struct frame *choose_frame(void) {
+
+    struct frame *frame = NULL;
+
+    struct hash_iterator i;
+
+    hash_first (&i, &frame_table);
+    while (hash_next (&i)) {
+        frame = hash_entry (hash_cur (&i), struct frame, elem);
+    }
+    
+    return frame;
+}
+
+static void evict_frame(struct frame *frame) {
+
 }
 
 
