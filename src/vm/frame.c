@@ -25,12 +25,12 @@ static void *frame_get_page(void *upage) {
 
     void *kpage = palloc_get_page(PAL_USER);
     lock_frame_access();
-    if (kpage == NULL){
+    if (kpage == NULL) {
         // evict a frame
         evict_frame(choose_frame());
         kpage = palloc_get_page(PAL_USER | PAL_ZERO);
         ASSERT(kpage != NULL);
-    };
+    }
 
     struct frame *next_frame = (struct frame *) malloc(sizeof(struct frame));
 
@@ -65,6 +65,7 @@ static struct frame *choose_frame(void) {
 
 static void evict_frame(struct frame *frame) {
     free_frame(frame->kaddr);
+    kernel_exit(-1);
 }
 
 static bool wipe_frame_memory(void *kaddr) {
