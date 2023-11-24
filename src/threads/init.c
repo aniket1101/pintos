@@ -35,6 +35,7 @@
 #endif
 #ifdef VM
 #include "devices/swap.h"
+#include "vm/frame.h"
 #endif
 #ifdef FILESYS
 #include "devices/block.h"
@@ -127,6 +128,10 @@ main (void)
   thread_start ();
   serial_init_queue ();
   timer_calibrate ();
+
+#ifdef VM
+  frame_init();
+#endif
 
 #ifdef FILESYS
   /* Initialize file system. */

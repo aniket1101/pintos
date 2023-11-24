@@ -1,10 +1,11 @@
 #include <hash.h>
 
-static void *frame_get_page(void *upage);
-static struct frame *choose_frame(void);
-static void evict_frame(struct frame *frame);
-static bool wipe_frame_memory(void *kaddr);
-static void free_frame(void *kaddr);
+void frame_init(void);
+struct frame *choose_frame(void);
+void *frame_get_page(void *upage);
+void frame_evict(struct frame *frame);
+bool wipe_frame_memory(void *kaddr);
+void free_frame(void *kaddr);
 
 struct frame {
     struct thread *t;
