@@ -25,13 +25,13 @@ struct supp_page_table_elem *insert_supp_page_table(struct hash *hash_table,
      elem);
 }
 
-static unsigned supp_page_table_hash(const struct hash_elem *e, void *aux UNUSED) {
+static unsigned supp_page_table_hash(const struct hash_elem *e, void *aux) {
   struct supp_page_table_elem *entry = hash_entry(e, struct supp_page_table_elem, elem);
   return hash_bytes(e, sizeof(void *));
 }
 
 static bool supp_page_table_less(const struct hash_elem *a, 
-    const struct hash_elem *b, void *aux UNUSED) {
+    const struct hash_elem *b, void *aux) {
     return hash_entry(a, struct supp_page_table_elem, elem)->vaddr
     < hash_entry(b, struct supp_page_table_elem, elem)->vaddr;
 }

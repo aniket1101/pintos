@@ -304,8 +304,9 @@ thread_create (const char *name, int priority,
   #ifdef USERPROG
     fd_hash_init(t);
     if (t->tid > 1) {
-    supp_page_table_init(t->supp_page_table);
+      supp_page_table_init(&(t->supp_page_table));
     }
+    t->is_writable = true;
   #endif
   try_yield();  
   

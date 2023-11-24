@@ -12,7 +12,7 @@ enum page_status {
 
 struct supp_page_table_elem {
     void *vaddr;                /* Virtual memory address for a page */
-    page_status status;         /* Status of a page */
+    enum page_status status;         /* Status of a page */
     uint32_t read_bytes;        /* A page's read bytes */
     uint32_t zero_bytes;        /* A page's zero bytes */
     uint8_t *upage;             /* upage for the page */

@@ -158,7 +158,7 @@ page_fault (struct intr_frame *f)
 
    /* Check if a fault address is in kernel space. */
    if(is_kernel_vaddr(fault_addr)) {
-      exit(-1);
+      kernel_exit(-1);
    }
 
    /* Makes the fault address start at a page boundary .*/
@@ -171,7 +171,7 @@ page_fault (struct intr_frame *f)
    struct supp_page_table_elem *page = get_supp_page_table(&curr->supp_page_table, vaddr);
 
    if(page == NULL) { /* Exit if the page does not exist. */
-      exit(-1);
+      kernel_exit(-1);
    } else {
       switch (page->status)
       {
@@ -188,7 +188,7 @@ page_fault (struct intr_frame *f)
          break;
       }
       // TO DO: Note that writable should not always be true
-      pagedir_set_page(&curr->pagedir, vaddr, frame_addr, &curr->is_writable);
+      pagedir_set_page(curr->pagedir, vaddr, frame_addr, curr->is_writable);
       page->status = LOADED;
    }
 
