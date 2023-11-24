@@ -12,6 +12,7 @@ static hash_hash_func frame_table_hash;
 static hash_less_func frame_table_less;
 
 static struct hash frame_table;
+static int clock_hand;
 static struct lock frame_lock;
 
 static void lock_frame_access(void);
@@ -19,6 +20,7 @@ static void unlock_frame_access(void);
 
 void frame_init(void) {
     hash_init(&frame_table, &frame_table_hash, &frame_table_less, NULL);
+    clock_hand = 0;
     lock_init(&frame_lock);
 }
 
@@ -58,22 +60,41 @@ void *frame_get_page(void *upage) {
 }
 
 struct frame *choose_frame(void) {
-    struct frame *frame = NULL;
-
     if (!hash_empty(&frame_table)) {
-        struct hash_iterator i;
+      struct hash_iterator i;  
+      hash_first (&i, &frame_table);
 
-        hash_first (&i, &frame_table);
-        while (hash_next (&i)) {
-            frame = hash_entry (hash_cur (&i), struct frame, elem);
+      // Set current element to clock hand
+      for (int index = 0; index < clock_hand; index++) {
+        hash_next (&i);
+      }
+
+      while (true) {
+        struct frame *frame = hash_entry(hash_cur(&i), struct frame, elem);
+        // havent checked for aliases?
+        if (!pagedir_is_accessed(frame->kaddr, frame->uaddr)) {
+          return frame;
+        } else {
+          pagedir_set_accessed(frame->kaddr, frame->uaddr, false);
+          // dirty should not need to be checked as accessed is read or write
         }
-    }
 
-    return frame;
+        // Sets iterator to next element, checking if its the end of the hash
+        if (hash_next (&i)) {
+          hash_first (&i, &frame_table);
+          clock_hand = -1;
+        }
+
+        clock_hand++;
+      }
+    }
+    return NULL;
 }
 
 void frame_evict(struct frame *frame) {
-    free_frame(frame->kaddr);
+    if (frame != NULL) {
+      free_frame(frame->kaddr);
+    }
     kernel_exit(-1);
 }
 
