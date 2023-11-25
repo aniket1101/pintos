@@ -23,7 +23,22 @@ void frame_init(struct hash *frame_table, struct lock *frame_lock) {
 static void *frame_get_page(void *upage) {
     ASSERT(is_user_vaddr(upage));
 
-    void *kpage = palloc_get_page(PAL_USER);
+    // Find frame with virtual address upage
+    struct frame frame = {.uaddr = upage}; // Fake element to search for
+    struct hash_elem *found_elem = hash_find (&frame_table, &(frame.elem));
+
+    // If it's not in any frame, cause a page fault
+    if (found_elem == NULL) {
+        
+    }
+
+    // Otherwise we can just return the physical address
+    return hash_entry(found_elem, struct frame, elem)->kpage;
+}
+
+void put_frame(void *upage) {
+    ASSERT(is_user_vaddr(upage));
+    void *kpage = palloc_get_page(PAL_USER);    
     lock_frame_access();
     if (kpage == NULL) {
         // evict a frame
@@ -42,7 +57,7 @@ static void *frame_get_page(void *upage) {
     unlock_frame_access();    
 
     if (inserted != NULL) {
-        // ERROR: Think of how to implement
+        kernel_exit(-1);
     }
 
     return kpage;
