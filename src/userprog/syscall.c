@@ -352,8 +352,6 @@ static inline int kernel_open(const char* file_name) {
 
   // Set fd and insert it into file_info and thread list
   struct fd *added_fd = fd_add(info);
-  if (added_fd == NULL) {
-  }
   return added_fd == NULL ? -1 : added_fd->fd_num;
 }
 
