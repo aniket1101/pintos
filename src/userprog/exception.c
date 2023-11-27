@@ -7,6 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/frame.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -151,6 +152,11 @@ page_fault (struct intr_frame *f)
   if (user) { // If user access has faulted, kill user process
 		check_pointer(fault_addr);
   }
+
+  void *vaddr = pg_round_down(fault_addr);
+
+  put_frame(vaddr);
+  return;
 
 	// Otherwise crash kernel
 
