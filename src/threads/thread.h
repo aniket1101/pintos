@@ -115,6 +115,8 @@ struct thread
     int exit_code;                   /* Exit code. */
     struct hash fds;                 /* Hash table of thread's fds. */
     struct file *file;               /* Pointer to executable file. */
+    struct hash supp_page_table;     /* Hash table of thread's pages. */
+    bool is_writable;                /* If file is writable or not*/
 #endif
 
     /* Owned by thread.c. */

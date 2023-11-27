@@ -131,6 +131,7 @@ start_process (void *arg_)
   if (file != NULL) {
     file_deny_write(file);
     thread_current()->file = file;
+    thread_current()->is_writable = false;
   }
   unlock_filesys_access();
 
