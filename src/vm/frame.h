@@ -1,7 +1,7 @@
 #include <hash.h>
 
 void frame_init(void);
-void *frame_get_page(const void *upage);
+void *frame_get_page(void *upage);
 void put_frame(void *upage);
 struct frame *choose_frame(void);
 void evict_frame(struct frame *frame);

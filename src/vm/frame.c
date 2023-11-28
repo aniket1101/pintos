@@ -7,6 +7,7 @@
 #include "threads/malloc.h"
 #include "userprog/syscall.h"
 #include "userprog/pagedir.h"
+#include "userprog/debug.h"
 
 static hash_hash_func frame_table_hash;
 static hash_less_func frame_table_less;
@@ -22,7 +23,8 @@ void frame_init(void) {
     lock_init(&frame_lock);
 }
 
-void *frame_get_page(const void *upage) {
+void *frame_get_page(void *upage) {
+    PUTBUF("IN GET PAGE");
     ASSERT(is_user_vaddr(upage));
 
     // Find frame with virtual address upage
@@ -30,8 +32,8 @@ void *frame_get_page(const void *upage) {
     struct hash_elem *found_elem = hash_find (&frame_table, &(frame.elem));
 
     // If it's not in any frame, cause a page fault
-    if (found_elem == NULL) {
-
+    if (found_elem == NULL) { 
+    
     }
 
     // Otherwise we can just return the physical address
@@ -40,10 +42,12 @@ void *frame_get_page(const void *upage) {
 
 void put_frame(void *upage) {
     ASSERT(is_user_vaddr(upage));
+    PUTBUF_FORMAT("UPAGE IS: %p", upage);
     void *kpage = palloc_get_page(PAL_USER);    
     lock_frame_access();
     if (kpage == NULL) {
         // evict a frame
+        PUTBUF("SHOULD NOT GO INSIDE HERE (evict)");
         evict_frame(choose_frame());
         kpage = palloc_get_page(PAL_USER | PAL_ZERO);
         ASSERT(kpage != NULL);
@@ -55,12 +59,14 @@ void put_frame(void *upage) {
     next_frame->kaddr = kpage;
     next_frame->uaddr = upage;
 
-    struct hash_elem *inserted = hash_insert(&frame_table, &next_frame->elem);
+    struct hash_elem *inserted = hash_insert(&frame_table, &(next_frame->elem));
     unlock_frame_access();    
 
     if (inserted != NULL) {
+        PUTBUF("SHOULD NOT GO INSIDE HERE (!inserted)");
         kernel_exit(-1);
     }
+    PUTBUF("FINISHED PUT FRAME");
 }
 
 struct frame *choose_frame(void) {
@@ -80,14 +86,14 @@ struct frame *choose_frame(void) {
 
 void evict_frame(struct frame *frame) {
     free_frame(frame->kaddr);
-    kernel_exit(-1);
+    // kernel_exit(-1);
 }
 
 bool wipe_frame_memory(void *kaddr) {
     ASSERT(is_kernel_vaddr(kaddr));
-    struct frame *frame;
-    frame->kaddr = kaddr;
-    struct hash_elem *elem = hash_find(&frame_table, &frame->elem);
+    struct frame frame;
+    frame.kaddr = kaddr;
+    struct hash_elem *elem = hash_find(&frame_table, &(frame.elem));
     
     if (elem == NULL) {
         return false;
