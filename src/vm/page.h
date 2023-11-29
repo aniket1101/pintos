@@ -4,10 +4,10 @@
 #include <hash.h>
 
 enum page_status {
-    LOADED,                     /* Loaded into memorty */
     SWAPPED,                    /* Swapped out */
     ZERO,                       /* Page completely zeroed out */
-    LAZY                        /* Lazy loaded */
+    EXEC,                       /* Lazy executed */
+    FRAME                       /* In the frame table */
 };
 
 struct supp_page {

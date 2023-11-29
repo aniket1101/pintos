@@ -1,6 +1,7 @@
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
+#include <debug.h>
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
 #include "userprog/debug.h"
@@ -151,7 +152,8 @@ page_fault (struct intr_frame *f)
    write = (f->error_code & PF_W) != 0;
    user = (f->error_code & PF_U) != 0;
 	
-   if (user) { // If user access has faulted, kill user process
+   /* If user access has faulted, kill user process. */ 
+   if (user) { 
  	   if (!is_user_vaddr(fault_addr) || fault_addr == NULL || !not_present) {
          kernel_exit(-1);
       }
@@ -163,7 +165,28 @@ page_fault (struct intr_frame *f)
    /* Get the relevant page from this thread's page table. */
    struct supp_page* page = get_supp_page_table(&t->supp_page_table, vaddr);
 
+   /* Get the kernel address using the frame. */
+   void *kaddr = put_frame(PAL_USER, vaddr);
 
+   /* If the page does not exists then kill the process*/
+   if (page == NULL) {
+      // Check for stack growth and otherwise exit
+   } else {
+      switch(page->status) {                                                          
+     
+         case SWAPPED:
+            break;
+         case ZERO:
+            break;
+         case EXEC:
+            break;
+         case FRAME:
+            break;
+         default:
+            PUTBUF("Unrecognised page status!!");
+            NOT_REACHED();
+      }
+   }
 
 
    /* To implement virtual memory, delete the rest of the function
