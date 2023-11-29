@@ -17,6 +17,7 @@
 #include "userprog/process.h"
 #include "userprog/fd.h"
 #include "userprog/debug.h"
+#include "vm/page.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -302,6 +303,10 @@ thread_create (const char *name, int priority,
   thread_unblock (t);
   #ifdef USERPROG
     fd_hash_init(t);
+    if (t->tid > 1) {
+      supp_page_table_init(&(t->supp_page_table));
+    }
+    t->is_writable = true;
   #endif
   try_yield();  
   

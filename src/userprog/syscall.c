@@ -28,7 +28,7 @@
 #define pop_arg(argnum, type) pop_var(arg_esp_offs(argnum, f->esp), type) 
 #define pop_ptr_arg(argnum, type) (type) check_pointer((void *) pop_arg(argnum, type))
 
-#define NUM_SYSCALLS 13
+#define NUM_SYSCALLS 15
 #define EXIT_BUF_SIZE 30
 
 /* Ensuring that only one syscall can access the file system at a time. */
@@ -51,6 +51,8 @@ static handle_func handle_write;
 static handle_func handle_seek;
 static handle_func handle_tell;
 static handle_func handle_close;
+static handle_func handle_mmap;
+static handle_func handle_munmap;
 
 /* Array of handler functions, indexed by syscall_num. */
 handle_func *handlers[NUM_SYSCALLS] = {
@@ -66,7 +68,9 @@ handle_func *handlers[NUM_SYSCALLS] = {
   &handle_write, 
   &handle_seek, 
   &handle_tell, 
-  &handle_close
+  &handle_close,
+  &handle_mmap,
+  &handle_munmap
 }; 
 
 /* Syscall functions which have access to the kernel/
@@ -79,6 +83,8 @@ static inline int kernel_open (const char *file);
 static inline int kernel_read (int fd, void *buffer, unsigned length);
 static inline int kernel_write (int fd, const void *buffer, unsigned length);
 static inline void kernel_close (int fd);
+static inline int kernel_mmap (void *addr, struct file_info *info);
+static inline void kernel_munmap (int mapping);
 
 void
 syscall_init (void) 
@@ -223,6 +229,19 @@ static void handle_close(struct intr_frame *f) {
   kernel_close(fd);
 }
 
+/* Wrapper for kernel_mmap() */
+static void handle_mmap(struct intr_frame *f) {
+  int fd_num = pop_arg(0, int);
+  void *addr = pop_arg(1, void *);
+  struct fd *fd_ = fd_lookup_safe(fd_num);
+  f->eax = kernel_mmap(addr, fd_->file_info);
+}
+
+static void handle_munmap(struct intr_frame *f) {
+  int mapping = pop_arg(0, int);
+  kernel_munmap(mapping);
+}
+
 /* Below are implementations of syscall functions with kernel access */ 
 
 /* Implements the exit system call by:
@@ -352,8 +371,6 @@ static inline int kernel_open(const char* file_name) {
 
   // Set fd and insert it into file_info and thread list
   struct fd *added_fd = fd_add(info);
-  if (added_fd == NULL) {
-  }
   return added_fd == NULL ? -1 : added_fd->fd_num;
 }
 
@@ -425,6 +442,14 @@ static inline void kernel_close(int fd_num) {
 
     lock_release(&filesys_lock);
   }
+}
+
+static inline int kernel_mmap(void *addr, struct file_info *info) {
+
+}
+
+static inline void kernel_munmap(int mapping) {
+  
 }
 
 /* Acquires filesys lock. */
