@@ -8,6 +8,8 @@
 #include "userprog/syscall.h"
 #include "userprog/pagedir.h"
 #include "userprog/debug.h"
+#include "devices/swap.h"
+
 
 static hash_hash_func frame_table_hash;
 static hash_less_func frame_table_less;
@@ -78,10 +80,13 @@ struct frame *choose_frame(void) {
         struct frame *frame = hash_entry(hash_cur(&i), struct frame, elem);
         // havent checked for aliases?
         if (!pagedir_is_accessed(frame->kaddr, frame->uaddr)) {
+          if (pagedir_is_dirty(frame->kaddr, frame->uaddr)) {
+            // need to check if its in mmap?
+            swap_in(frame->uaddr, sizeof(frame));
+          }
           return frame;
         } else {
           pagedir_set_accessed(frame->kaddr, frame->uaddr, false);
-          // dirty should not need to be checked as accessed is read or write
         }
 
         // Sets iterator to next element, checking if its the end of the hash
