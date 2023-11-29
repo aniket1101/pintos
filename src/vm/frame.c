@@ -24,7 +24,6 @@ void frame_init(void) {
 }
 
 void *get_frame(void *upage) {
-    PUTBUF("IN GET PAGE");
     ASSERT(is_user_vaddr(upage));
 
     // Find frame with virtual address upage
@@ -42,13 +41,10 @@ void *get_frame(void *upage) {
 
 void *put_frame(enum palloc_flags flag, void *upage) {
     ASSERT(is_user_vaddr(upage));
-    PUTBUF_FORMAT("UPAGE IS: %p", upage);
-    void *kpage = palloc_get_page(flag); 
-    PUTBUF_FORMAT("KPAGE IS: %p", kpage);   
+    void *kpage = palloc_get_page(flag);  
     lock_frame_access();
     if (kpage == NULL) {
         // evict a frame
-        PUTBUF("SHOULD NOT GO INSIDE HERE (evict)");
         evict_frame(choose_frame());
         kpage = palloc_get_page(flag);
         ASSERT(kpage != NULL);
@@ -62,13 +58,7 @@ void *put_frame(enum palloc_flags flag, void *upage) {
 
     struct hash_elem *inserted = hash_insert(&frame_table, &(next_frame->elem));
     unlock_frame_access();    
-
-    // if (inserted != NULL) {
-    //     PUTBUF("SHOULD NOT GO INSIDE HERE (!inserted)");
-    //     kernel_exit(-1);
-    // }
-    // PUTBUF("FINISHED PUT FRAME");
-
+    
     return kpage;
 }
 
