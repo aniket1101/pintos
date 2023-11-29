@@ -73,10 +73,10 @@ struct frame *choose_frame(void) {
         struct frame *frame = hash_entry(hash_cur(&i), struct frame, elem);
         // havent checked for aliases?
         if (!pagedir_is_accessed(frame->kaddr, frame->uaddr)) {
+          // If frame is dirty, needed in the swap table?
           return frame;
         } else {
           pagedir_set_accessed(frame->kaddr, frame->uaddr, false);
-          // dirty should not need to be checked as accessed is read or write
         }
 
         // Sets iterator to next element, checking if its the end of the hash
