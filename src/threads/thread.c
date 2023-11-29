@@ -306,7 +306,7 @@ thread_create (const char *name, int priority,
     if (t->tid > 1) {
       supp_page_table_init(&(t->supp_page_table));
     }
-    t->is_writable = true;
+    //t->is_writable = true;
   #endif
   try_yield();  
   

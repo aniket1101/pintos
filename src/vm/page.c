@@ -27,7 +27,7 @@ struct supp_page *insert_supp_page_table(struct hash *hash_table,
 
 static unsigned supp_page_table_hash(const struct hash_elem *e, void *aux) {
   struct supp_page *entry = hash_entry(e, struct supp_page, elem);
-  return hash_bytes(e, sizeof(void *));
+  return hash_bytes(entry->vaddr, sizeof(entry->vaddr));
 }
 
 static bool supp_page_table_less(const struct hash_elem *a, 
