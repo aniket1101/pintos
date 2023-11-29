@@ -132,7 +132,6 @@ start_process (void *arg_)
   if (file != NULL) {
     file_deny_write(file);
     thread_current()->file = file;
-    thread_current()->is_writable = false;
   }
   unlock_filesys_access();
 
@@ -658,3 +657,4 @@ install_page (void *upage, void *kpage, bool writable)
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
+

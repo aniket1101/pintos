@@ -1,10 +1,8 @@
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
-#include "userprog/pagedir.h"
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
-#include "userprog/process.h"
 #include "userprog/debug.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"

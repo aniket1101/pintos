@@ -168,4 +168,3 @@ static bool frame_table_less(const struct hash_elem *a,
     return hash_entry(a, struct frame, elem)->kaddr
     < hash_entry(b, struct frame, elem)->kaddr;
 }
-
