@@ -155,10 +155,6 @@ page_fault (struct intr_frame *f)
       }
    }
 
-   PUTBUF("IN PAGE FAULT HANDLER");
-   put_frame(pg_round_down((void *) vtop(fault_addr)));
-   return;
-
 	// Otherwise crash kernel
 
    /* To implement virtual memory, delete the rest of the function

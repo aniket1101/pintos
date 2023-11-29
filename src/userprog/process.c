@@ -581,9 +581,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (kpage == NULL){
         
         /* Get a new page of memory. */
-        PUTBUF("IN LOAD SEGMENT (before)");
-        kpage = frame_get_page(upage);
-        PUTBUF("IN LOAD SEGMENT (after)");
+        kpage = put_frame (PAL_USER, upage);
         if (kpage == NULL){
           return false;
         }
@@ -591,9 +589,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         /* Add the page to the process's address space. */
         if (!install_page (upage, kpage, writable)) 
         {
-          PUTBUF("FREEING IN LOAD SEGMENT (before)");
           free_frame (kpage);
-          PUTBUF("FREEING IN LOAD SEGMENT (after)");
           return false; 
         }     
         
@@ -629,18 +625,15 @@ setup_stack (void **esp)
   bool success = false;
 
   // Need to take into account the zeroed
-  PUTBUF("IN SETUP STACK (before)");
-  kpage = frame_get_page((void *) ((uint8_t *) PHYS_BASE - PGSIZE));
-  PUTBUF("IN SETUP STACK (after)");
+  kpage = (uint8_t *) put_frame(PAL_USER | PAL_ZERO, PHYS_BASE - PGSIZE);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success)
+      if (success) {
         *esp = PHYS_BASE;
-      else
-        PUTBUF("FREEING IN SETUP STACK (before)");
+      } else {  
         free_frame (kpage);
-        PUTBUF("FREEING IN SETUP STACK (after)");
+      }
     }
   return success;
 }
