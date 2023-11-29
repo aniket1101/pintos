@@ -7,6 +7,8 @@
 #include "threads/malloc.h"
 #include "userprog/syscall.h"
 #include "userprog/pagedir.h"
+#include "devices/swap.h"
+
 
 static hash_hash_func frame_table_hash;
 static hash_less_func frame_table_less;
@@ -73,7 +75,10 @@ struct frame *choose_frame(void) {
         struct frame *frame = hash_entry(hash_cur(&i), struct frame, elem);
         // havent checked for aliases?
         if (!pagedir_is_accessed(frame->kaddr, frame->uaddr)) {
-          // If frame is dirty, needed in the swap table?
+          if (pagedir_is_dirty(frame->kaddr, frame->uaddr)) {
+            // need to check if its in mmap?
+            swap_in(frame->uaddr, sizeof(frame));
+          }
           return frame;
         } else {
           pagedir_set_accessed(frame->kaddr, frame->uaddr, false);
