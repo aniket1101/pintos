@@ -7,6 +7,7 @@
 #include "threads/malloc.h"
 #include "userprog/syscall.h"
 #include "userprog/pagedir.h"
+#include "userprog/debug.h"
 
 static hash_hash_func frame_table_hash;
 static hash_less_func frame_table_less;
@@ -24,22 +25,30 @@ void frame_init(void) {
     lock_init(&frame_lock);
 }
 
-void *frame_get_page(void *upage) {
+void *get_frame(void *upage) {
     ASSERT(is_user_vaddr(upage));
 
-    // Checks whether the user page is already in the frame table
-    struct frame frame = {.uaddr = upage};
-    struct hash_elem *elem = hash_find(&frame_table, &frame.elem);
-    if (elem != NULL) {
-        return hash_entry(elem, struct frame, elem)->kaddr;
+    // Find frame with virtual address upage
+    struct frame frame = {.uaddr = upage}; // Fake element to search for
+    struct hash_elem *found_elem = hash_find (&frame_table, &(frame.elem));
+
+    // If it's not in any frame, cause a page fault
+    if (found_elem == NULL) { 
+        return NULL;
     }
-    
-    void *kpage = palloc_get_page(PAL_USER);
+
+    // Otherwise we can just return the physical address
+    return hash_entry(found_elem, struct frame, elem);
+}
+
+void *put_frame(enum palloc_flags flag, void *upage) {
+    ASSERT(is_user_vaddr(upage));
+    void *kpage = palloc_get_page(flag);  
     lock_frame_access();
     if (kpage == NULL) {
         // evict a frame
-        frame_evict(choose_frame());
-        kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+        evict_frame(choose_frame());
+        kpage = palloc_get_page(flag);
         ASSERT(kpage != NULL);
     }
 
@@ -49,13 +58,9 @@ void *frame_get_page(void *upage) {
     next_frame->kaddr = kpage;
     next_frame->uaddr = upage;
 
-    struct hash_elem *inserted = hash_insert(&frame_table, &next_frame->elem);
+    struct hash_elem *inserted = hash_insert(&frame_table, &(next_frame->elem));
     unlock_frame_access();    
-
-    if (inserted != NULL) {
-        // ERROR: Think of how to implement
-    }
-
+    
     return kpage;
 }
 
@@ -99,6 +104,7 @@ void frame_evict(struct frame *frame) {
 }
 
 bool wipe_frame_memory(void *kaddr) {
+bool wipe_frame_memory(void *kaddr) {
     ASSERT(is_kernel_vaddr(kaddr));
     struct frame frame;
     frame.kaddr = kaddr;
@@ -109,11 +115,14 @@ bool wipe_frame_memory(void *kaddr) {
     }
 
     struct frame *entry = hash_entry(elem, struct frame, elem);
-    frame_evict(entry);
+    evict_frame(entry);
     return true;
 
 }
 
+void free_frame(void *kaddr) {
+    struct frame frame;
+    frame.kaddr = kaddr;
 void free_frame(void *kaddr) {
     struct frame frame;
     frame.kaddr = kaddr;
@@ -124,6 +133,7 @@ void free_frame(void *kaddr) {
         lock_frame_access();
     }
 
+    struct hash_elem *elem = hash_delete(&frame_table, &frame.elem);
     struct hash_elem *elem = hash_delete(&frame_table, &frame.elem);
     ASSERT(elem != NULL);
     struct frame *freed_frame = hash_entry(elem, struct frame, elem);
@@ -149,6 +159,7 @@ static void unlock_frame_access() {
 
 static unsigned frame_table_hash(const struct hash_elem *e, void *aux UNUSED) {
   struct frame *frame = hash_entry(e, struct frame, elem);
+  return hash_int((uint32_t) frame->kaddr);
   return hash_int((uint32_t) frame->kaddr);
 }
 

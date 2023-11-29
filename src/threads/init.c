@@ -143,6 +143,8 @@ main (void)
 #ifdef VM
   /* Initialise the swap disk */  
   swap_init ();
+  /* Initialise frame table */
+  frame_init();
 #endif
 
   printf ("Boot complete.\n");

@@ -26,6 +26,7 @@
 #include "threads/malloc.h"
 #include "filesys/file.h"
 #include <hash.h>
+#include "vm/frame.h"
 
 #define PUSH_ESP(val, type) \
   if_->esp -= sizeof(type); \
@@ -580,7 +581,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       if (kpage == NULL){
         
         /* Get a new page of memory. */
-        kpage = palloc_get_page (PAL_USER);
+        PUTBUF("IN LOAD SEGMENT (before)");
+        kpage = frame_get_page(upage);
+        PUTBUF("IN LOAD SEGMENT (after)");
         if (kpage == NULL){
           return false;
         }
@@ -588,7 +591,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         /* Add the page to the process's address space. */
         if (!install_page (upage, kpage, writable)) 
         {
-          palloc_free_page (kpage);
+          PUTBUF("FREEING IN LOAD SEGMENT (before)");
+          free_frame (kpage);
+          PUTBUF("FREEING IN LOAD SEGMENT (after)");
           return false; 
         }     
         
@@ -623,14 +628,19 @@ setup_stack (void **esp)
   uint8_t *kpage;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  // Need to take into account the zeroed
+  PUTBUF("IN SETUP STACK (before)");
+  kpage = frame_get_page((void *) ((uint8_t *) PHYS_BASE - PGSIZE));
+  PUTBUF("IN SETUP STACK (after)");
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
       else
-        palloc_free_page (kpage);
+        PUTBUF("FREEING IN SETUP STACK (before)");
+        free_frame (kpage);
+        PUTBUF("FREEING IN SETUP STACK (after)");
     }
   return success;
 }

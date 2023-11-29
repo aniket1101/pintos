@@ -69,7 +69,7 @@ vm_SRC += devices/swap.c		# Swap block manager.
 vm_SRC += vm/frame.c		# Frame table	
 #vm_SRC = vm/file.c			# Some other file.
 
-# Filesystem code.
+# Filesystem code.	
 filesys_SRC  = filesys/filesys.c	# Filesystem core.
 filesys_SRC += filesys/free-map.c	# Free sector bitmap.
 filesys_SRC += filesys/file.c		# Files.
