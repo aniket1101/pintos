@@ -6,8 +6,8 @@
 enum page_status {
     SWAPPED,                    /* Swapped out */
     ZERO,                       /* Page completely zeroed out */
-    EXEC,                       /* Lazy executed */
-    FRAME                       /* In the frame table */
+    MMAPPED,                    /* Mapped in the filesystem */
+    LOADED                      /* Already loaded in */
 };
 
 struct supp_page {

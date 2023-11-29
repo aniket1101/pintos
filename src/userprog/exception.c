@@ -4,12 +4,14 @@
 #include <debug.h>
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
+#include "userprog/process.h"
 #include "userprog/debug.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "devices/swap.h"
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -165,27 +167,37 @@ page_fault (struct intr_frame *f)
    /* Get the relevant page from this thread's page table. */
    struct supp_page* page = get_supp_page_table(&t->supp_page_table, vaddr);
 
-   /* Get the kernel address using the frame. */
-   void *kaddr = put_frame(PAL_USER, vaddr);
-
    /* If the page does not exists then kill the process*/
    if (page == NULL) {
-      // Check for stack growth and otherwise exit
+      // Check for stack growth, otherwise exit and free
    } else {
+      /* Get the kernel address using the frame. */
+      void *kaddr = put_frame(PAL_USER, vaddr);
+      bool writable = true;
+
+      /* Depending on page status... */
       switch(page->status) {                                                          
-     
          case SWAPPED:
+            // Handle swap by lazy loading
+            swap_in(vaddr, (size_t) kaddr);
+            page->status = LOADED;
             break;
          case ZERO:
+         /* Page from from is also zeroed out */
+            page->status = LOADED;
             break;
-         case EXEC:
+         case MMAPPED:
+         // Implement mapped files later
+         // Set writable according to file
             break;
-         case FRAME:
+         case LOADED:
+            PUTBUF("There should not be a fault from a page in memory!!"); 
             break;
          default:
             PUTBUF("Unrecognised page status!!");
             NOT_REACHED();
       }
+      install_page(vaddr, kaddr, writable);
    }
 
 
