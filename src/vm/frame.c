@@ -58,7 +58,7 @@ void *put_frame(enum palloc_flags flag, void *upage) {
     next_frame->kaddr = kpage;
     next_frame->uaddr = upage;
 
-    struct hash_elem *inserted = hash_insert(&frame_table, &(next_frame->elem));
+    hash_insert(&frame_table, &(next_frame->elem));
     unlock_frame_access();    
     
     return kpage;
@@ -96,14 +96,13 @@ struct frame *choose_frame(void) {
     return NULL;
 }
 
-void frame_evict(struct frame *frame) {
+void evict_frame(struct frame *frame) {
     if (frame != NULL) {
       free_frame(frame->kaddr);
     }
     kernel_exit(-1);
 }
 
-bool wipe_frame_memory(void *kaddr) {
 bool wipe_frame_memory(void *kaddr) {
     ASSERT(is_kernel_vaddr(kaddr));
     struct frame frame;
@@ -123,9 +122,6 @@ bool wipe_frame_memory(void *kaddr) {
 void free_frame(void *kaddr) {
     struct frame frame;
     frame.kaddr = kaddr;
-void free_frame(void *kaddr) {
-    struct frame frame;
-    frame.kaddr = kaddr;
 
     bool frame_locked = lock_held_by_current_thread(&frame_lock);
 
@@ -133,7 +129,6 @@ void free_frame(void *kaddr) {
         lock_frame_access();
     }
 
-    struct hash_elem *elem = hash_delete(&frame_table, &frame.elem);
     struct hash_elem *elem = hash_delete(&frame_table, &frame.elem);
     ASSERT(elem != NULL);
     struct frame *freed_frame = hash_entry(elem, struct frame, elem);
