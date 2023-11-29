@@ -10,7 +10,7 @@ enum page_status {
     LAZY                        /* Lazy loaded */
 };
 
-struct supp_page_table_elem {
+struct supp_page {
     void *vaddr;                /* Virtual memory address for a page */
     enum page_status status;         /* Status of a page */
     uint32_t read_bytes;        /* A page's read bytes */
@@ -22,10 +22,11 @@ struct supp_page_table_elem {
 
 bool supp_page_table_init(struct hash *hash_table);
 void supp_page_table_destroy(struct hash *hash_table);
-struct supp_page_table_elem *get_supp_page_table(struct hash *hash_table,
+struct supp_page *get_supp_page_table(struct hash *hash_table,
                                                               void *vaddr);
-struct supp_page_table_elem *insert_supp_page_table(struct hash *hash_table,
-                                            struct supp_page_table_elem *elem);
+struct supp_page *insert_supp_page_table(struct hash *hash_table,
+                                            struct supp_page *elem);
+
 
 
 
