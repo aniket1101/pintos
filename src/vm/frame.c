@@ -23,7 +23,7 @@ void frame_init(void) {
     lock_init(&frame_lock);
 }
 
-void *frame_get_page(void *upage) {
+void *get_frame(void *upage) {
     PUTBUF("IN GET PAGE");
     ASSERT(is_user_vaddr(upage));
 
@@ -33,23 +33,24 @@ void *frame_get_page(void *upage) {
 
     // If it's not in any frame, cause a page fault
     if (found_elem == NULL) { 
-    
+        return NULL;
     }
 
     // Otherwise we can just return the physical address
-    return hash_entry(found_elem, struct frame, elem)->kaddr;
+    return hash_entry(found_elem, struct frame, elem);
 }
 
-void put_frame(void *upage) {
+void *put_frame(enum palloc_flags flag, void *upage) {
     ASSERT(is_user_vaddr(upage));
     PUTBUF_FORMAT("UPAGE IS: %p", upage);
-    void *kpage = palloc_get_page(PAL_USER);    
+    void *kpage = palloc_get_page(flag); 
+    PUTBUF_FORMAT("KPAGE IS: %p", kpage);   
     lock_frame_access();
     if (kpage == NULL) {
         // evict a frame
         PUTBUF("SHOULD NOT GO INSIDE HERE (evict)");
         evict_frame(choose_frame());
-        kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+        kpage = palloc_get_page(flag);
         ASSERT(kpage != NULL);
     }
 
@@ -62,11 +63,13 @@ void put_frame(void *upage) {
     struct hash_elem *inserted = hash_insert(&frame_table, &(next_frame->elem));
     unlock_frame_access();    
 
-    if (inserted != NULL) {
-        PUTBUF("SHOULD NOT GO INSIDE HERE (!inserted)");
-        kernel_exit(-1);
-    }
-    PUTBUF("FINISHED PUT FRAME");
+    // if (inserted != NULL) {
+    //     PUTBUF("SHOULD NOT GO INSIDE HERE (!inserted)");
+    //     kernel_exit(-1);
+    // }
+    // PUTBUF("FINISHED PUT FRAME");
+
+    return kpage;
 }
 
 struct frame *choose_frame(void) {
