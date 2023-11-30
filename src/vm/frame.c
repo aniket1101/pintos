@@ -45,7 +45,13 @@ void *get_frame(void *upage) {
 
 void *put_frame(enum palloc_flags flag, void *upage) {
     ASSERT(is_user_vaddr(upage));
-    void *kpage = palloc_get_page(flag);  
+    void *kpage = get_frame(upage);
+    
+    if (kpage != NULL) {
+      return kpage;
+    }
+
+    kpage = palloc_get_page(flag);  
     lock_frame_access();
     if (kpage == NULL) {
         // evict a frame
