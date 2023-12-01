@@ -1,4 +1,6 @@
 #include "vm/page.h"
+#include <stdio.h>
+#include "threads/malloc.h"
 
 static hash_hash_func supp_page_table_hash;
 static hash_less_func supp_page_table_less;
@@ -18,11 +20,18 @@ struct supp_page *get_supp_page_table(struct hash *hash_table,
      struct supp_page, elem);
 }
 
-struct supp_page *insert_supp_page_table(struct hash *hash_table,
-                                            struct supp_page *elem) {
-    struct hash_elem *el = hash_insert(hash_table, &elem->elem);
-    return (el == NULL) ? NULL : hash_entry(el, struct supp_page,
-     elem);
+void insert_supp_page_table(struct hash *hash_table,
+                                            void *vaddr,
+                                             enum page_status status) {
+    ASSERT(hash_table != NULL);
+    struct supp_page *el = malloc(sizeof(struct supp_page));
+    ASSERT(el != NULL);
+    el->vaddr = vaddr;
+    el->status = status;
+    struct hash_elem *entry = hash_insert(hash_table, &el->elem);
+    if (entry != NULL) {
+        hash_entry(entry, struct supp_page, elem)->status = status;
+    }
 }
 
 static unsigned supp_page_table_hash(const struct hash_elem *e, void *aux) {
@@ -31,8 +40,9 @@ static unsigned supp_page_table_hash(const struct hash_elem *e, void *aux) {
 }
 
 static bool supp_page_table_less(const struct hash_elem *a, 
-    const struct hash_elem *b, void *aux) {
+        const struct hash_elem *b, void *aux) {
     return hash_entry(a, struct supp_page, elem)->vaddr
     < hash_entry(b, struct supp_page, elem)->vaddr;
 }
+
 

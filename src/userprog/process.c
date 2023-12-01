@@ -27,6 +27,8 @@
 #include "filesys/file.h"
 #include <hash.h>
 #include "vm/frame.h"
+#include "vm/page.h"
+
 
 #define PUSH_ESP(val, type) \
   if_->esp -= sizeof(type); \
@@ -132,6 +134,7 @@ start_process (void *arg_)
   if (file != NULL) {
     file_deny_write(file);
     thread_current()->file = file;
+    // thread_current()->is_writable = false;
   }
   unlock_filesys_access();
 
@@ -573,6 +576,13 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Check if virtual page already allocated */
       struct thread *t = thread_current ();
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
+
+      if (page_zero_bytes == PGSIZE) {
+        insert_supp_page_table(&t->supp_page_table, upage, ZERO);
+      } else {
+        insert_supp_page_table(&t->supp_page_table, upage, MMAPPED);
+        // Insert memory mapped file later
+      }
       
       if (kpage == NULL){
         

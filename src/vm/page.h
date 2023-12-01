@@ -20,12 +20,14 @@ struct supp_page {
     struct hash_elem elem;      /* Allows for hash of pages */
 };
 
+
 bool supp_page_table_init(struct hash *hash_table);
 void supp_page_table_destroy(struct hash *hash_table);
 struct supp_page *get_supp_page_table(struct hash *hash_table,
                                                               void *vaddr);
-struct supp_page *insert_supp_page_table(struct hash *hash_table,
-                                            struct supp_page *elem);
+void insert_supp_page_table(struct hash *hash_table,
+                                            void *vaddr, 
+                                            enum page_status status);
 
 
 
