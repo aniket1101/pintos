@@ -17,8 +17,11 @@
 #include "userprog/process.h"
 #include "userprog/fd.h"
 #include "userprog/debug.h"
+#endif
+#ifdef VM
 #include "vm/page.h"
 #endif
+
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -301,13 +304,11 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-  #ifdef USERPROG
     fd_hash_init(t);
     if (t->tid > 1) {
       supp_page_table_init(&(t->supp_page_table));
     }
-    t->is_writable = true;
-  #endif
+    // t->is_writable = true;
   try_yield();  
   
   return tid;
