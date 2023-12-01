@@ -578,6 +578,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Check if virtual page already allocated */
       struct thread *t = thread_current ();
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
+
+      if (page_zero_bytes == PGSIZE) {
+        supp_page_table_insert(&t->supp_page_table, upage, ZERO);
+      } else {
+        supp_page_table_insert(&t->supp_page_table, upage, MMAPPED);
+      }
       
       if (kpage == NULL){
         
