@@ -583,6 +583,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         supp_page_table_insert(&t->supp_page_table, upage, ZERO);
       } else {
         supp_page_table_insert(&t->supp_page_table, upage, MMAPPED);
+        // Insert memory mapped file later
       }
       
       if (kpage == NULL){
