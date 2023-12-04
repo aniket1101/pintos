@@ -154,22 +154,21 @@ page_fault (struct intr_frame *f)
    write = (f->error_code & PF_W) != 0;
    user = (f->error_code & PF_U) != 0;
 	
-   /* If user access has faulted, kill user process. */ 
-   if (user) { 
+   /* If user access has faulted, kill user process. */  
  	   if (!is_user_vaddr(fault_addr) || fault_addr == NULL || !not_present) {
          kernel_exit(-1);
       }
-   }
 
 	/* Round the fault address down to a page boundary. */
    void* vaddr = pg_round_down(fault_addr);
 
    /* Get the relevant page from this thread's page table. */
-   struct supp_page* page = get_supp_page_table(&t->supp_page_table, vaddr);
+   struct supp_page *page = get_supp_page_table(&t->supp_page_table, vaddr);
 
    /* If the page does not exists then kill the process*/
    if (page == NULL) {
       // Check for stack growth, otherwise exit and free
+      kernel_exit(-1);
    } else {
       /* Get the kernel address using the frame. */
       void *kaddr = put_frame(PAL_USER, vaddr);

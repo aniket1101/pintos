@@ -1,6 +1,7 @@
 #include "vm/page.h"
 #include <stdio.h>
 #include "threads/malloc.h"
+#include "threads/vaddr.h"
 
 static hash_hash_func supp_page_table_hash;
 static hash_less_func supp_page_table_less;
@@ -14,10 +15,11 @@ void supp_page_table_destroy(struct hash *hash_table) {
     hash_destroy(hash_table, NULL);
 }
 
-struct supp_page *get_supp_page_table(struct hash *hash_table,
-                                                              void *vaddr) {
-    return hash_entry(hash_find(hash_table, vaddr),
-     struct supp_page, elem);
+struct supp_page *get_supp_page_table(struct hash *hash_table, void *vaddr) {
+    struct supp_page page;
+    page.vaddr = vaddr;
+    struct hash_elem *entry = hash_find(hash_table, &page.elem);
+    return entry == NULL ? NULL : hash_entry(entry, struct supp_page, elem);
 }
 
 void insert_supp_page_table(struct hash *hash_table,
@@ -26,7 +28,7 @@ void insert_supp_page_table(struct hash *hash_table,
     ASSERT(hash_table != NULL);
     struct supp_page *el = malloc(sizeof(struct supp_page));
     ASSERT(el != NULL);
-    el->vaddr = vaddr;
+    el->vaddr = pg_round_down(vaddr);
     el->status = status;
     struct hash_elem *entry = hash_insert(hash_table, &el->elem);
     if (entry != NULL) {

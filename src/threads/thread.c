@@ -304,10 +304,10 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-    fd_hash_init(t);
-    if (t->tid > 1) {
-      supp_page_table_init(&(t->supp_page_table));
-    }
+  fd_hash_init(t);
+  if (t->tid > 1) {
+    supp_page_table_init(&(t->supp_page_table));
+  }
     // t->is_writable = true;
   try_yield();  
   
@@ -691,6 +691,7 @@ init_thread (struct thread *t, const char *name, int priority)
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
+  supp_page_table_init(&(t->supp_page_table));
   intr_set_level (old_level);
 }
 
