@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdint.h>
 #include <hash.h>
 
 typedef int mapid_t;
@@ -15,7 +16,7 @@ struct mmap_file_page {
     void *page;
     struct file *file;
     off_t offset;
-    int page_space;
+    uint32_t page_space;
     bool is_writable;
     struct hash_elem h_elem;
 }

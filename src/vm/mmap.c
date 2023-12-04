@@ -25,7 +25,7 @@ bool add_mmap(hash *hash_table, mapid_t mapid, void *start_page,
     map_link->start_page = start_page;
     map_link->end_page = end_page;
 
-    struct hash_elem *elem = hash_insert(hash_table, &map_link->hash_elem);
+    struct hash_elem *elem = hash_insert(hash_table, &map_link->elem);
 
     return elem == NULL;
  }
@@ -57,6 +57,54 @@ static bool mmap_link_addr_table_less(const struct hash_elem *a,
 bool mmap_fpt_init(struct hash *hash_table) {
     return hash_init(hash_table, &mmap_fpt_hash,
                                  &mmap_fpt_less, NULL);
+}
+
+bool insert_mmap_fpt(struct hash *hash_table, mapid_t map_id, void *page,
+    struct file *file, off_t offset, uint32_t page_space, bool is_writable,
+    struct hash_elem h_elem) {
+        struct mmap_file_page *mmap_fp 
+    = (struct mmap_file_page*) malloc(sizeof(struct mmap_file_page));
+    
+    if (mmap_fp == NULL) {
+        return false;
+    }
+    ASSERT(page_space <= PG_SIZE);
+    mmap_fp->mapid = mapid;
+    mmap_fp->page = page;
+    mmap_fp->file = file;
+    mmap_fp->offset = offset;
+    mmap_fp->page_space = page_space;
+    mmap_fp->end_page = end_page;    
+
+    struct hash_elem *elem = hash_insert(hash_table, &mmap_fp->elem);
+
+    return elem == NULL;
+}
+
+struct mmap_file_page *get_mmap_fpt(struct hash *hash_table, void *page) {
+    struct mmap_file_page mmap_fp;
+    mmap_fp.page = page;
+    struct hash_elem *el = hash_find(hash_table, &mmap_fp.elem);
+    return el == NULL ? NULL : hash_entry(el, struct mmap_file_page, elem);
+}
+
+bool delete_mmap_fp(struct hash *hash_table, struct mmap_file_page *mmap_fp) {
+    ASSERT(mmap_fp != NULL);
+    struct hash_elem *elem = hash_delete(hash_table, &mmap_fp->elem);
+    if (elem != NULL) {
+        delete_mmap_fpt(elem, NULL);
+    }
+
+    return elem != NULL;
+}
+
+void destroy_mmap_fpt(struct hash *hash_table) {
+    ASSERT(hash_table != NULL);
+    hash_destroy(hash_table, NULL);
+}
+
+void delete_mmap_fpt(struct hash_elem *elem, void *aux UNUSED) {
+    free(hash_entry(elem, struct mmap_file_page, elem));
 }
 
 static unsigned mmap_fpt_hash(const struct hash_elem *e, void *aux) {
