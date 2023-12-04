@@ -36,13 +36,13 @@ void insert_supp_page_table(struct hash *hash_table,
     }
 }
 
-static unsigned supp_page_table_hash(const struct hash_elem *e, void *aux) {
+static unsigned supp_page_table_hash(const struct hash_elem *e, void *aux UNUSED) {
   struct supp_page *entry = hash_entry(e, struct supp_page, elem);
   return hash_bytes(&entry->vaddr, sizeof(entry->vaddr));
 }
 
 static bool supp_page_table_less(const struct hash_elem *a, 
-        const struct hash_elem *b, void *aux) {
+        const struct hash_elem *b, void *aux UNUSED) {
     return hash_entry(a, struct supp_page, elem)->vaddr
     < hash_entry(b, struct supp_page, elem)->vaddr;
 }

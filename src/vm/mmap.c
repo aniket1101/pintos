@@ -1,10 +1,12 @@
 #include "mmap.h"
+#include "threads/vaddr.h"
 
 
 static hash_hash_func mmap_link_addr_table_hash;
 static hash_less_func mmap_link_addr_table_less;
 static hash_hash_func mmap_fpt_hash;
 static hash_less_func mmap_fpt_less;
+void delete_mmap_fpt(struct hash_elem *elem, void *aux UNUSED);
 
 
 bool mmap_init(struct hash *hash_table) {
@@ -12,16 +14,16 @@ bool mmap_init(struct hash *hash_table) {
                                  &mmap_link_addr_table_less, NULL);
 }
 
-bool add_mmap(hash *hash_table, mapid_t mapid, void *start_page,
+bool add_mmap(struct hash *hash_table, mapid_t map_id, void *start_page,
  void *end_page) {
-    struct mapid_link_addr *map_link 
-    = (struct mapid_link_addr*) malloc(sizeof(struct mapid_link_addr));
+    struct mmap_link_addr *map_link 
+    = (struct mmap_link_addr*) malloc(sizeof(struct mmap_link_addr));
     
     if (map_link == NULL) {
         return false;
     }
 
-    map_link->mapid = mapid;
+    map_link->map_id = map_id;
     map_link->start_page = start_page;
     map_link->end_page = end_page;
 
@@ -30,28 +32,29 @@ bool add_mmap(hash *hash_table, mapid_t mapid, void *start_page,
     return elem == NULL;
  }
 
- struct mapid_link_addr *get_mmap(struct hash *hash_table, mapid_t mapid) {
-    struct mapid_link_addr map_link;
-    map_link.mapid = mapid;
-    return hash_entry(hash_find(hash_table, map_link.elem),
-     struct map_link_addr, elem);
+ struct mmap_link_addr *get_mmap(struct hash *hash_table, mapid_t map_id) {
+    struct mmap_link_addr map_link;
+    map_link.map_id = map_id;
+    return hash_entry(hash_find(hash_table, &map_link.elem),
+     struct mmap_link_addr, elem);
  }
 
- bool delete_mmap(struct hash *hash_table, mapid_t mapid) {
-    struct mapid_link_addr *link = get_mmap(table, mapid);
+ bool delete_mmap(struct hash *hash_table, mapid_t map_id) {
+    struct mmap_link_addr *link = get_mmap(hash_table, map_id);
     struct hash_elem *elem = hash_delete(hash_table, &link->elem);
     return elem != NULL;
  }
 
-static unsigned mmap_link_addr_table_hash(const struct hash_elem *e, void *aux) {
+static unsigned mmap_link_addr_table_hash(const struct hash_elem *e,
+ void *aux UNUSED) {
   struct mmap_link_addr *entry = hash_entry(e, struct mmap_link_addr, elem);
-  return hash_bytes(&entry->mapid, sizeof(entry->mapid));
+  return hash_bytes(&entry->map_id, sizeof(entry->map_id));
 }
 
 static bool mmap_link_addr_table_less(const struct hash_elem *a, 
-        const struct hash_elem *b, void *aux) {
-    return hash_entry(a, struct mmap_link_addr, elem)->mapid
-    < hash_entry(b, struct mmap_link_addr, elem)->mapid;
+        const struct hash_elem *b, void *aux UNUSED) {
+    return hash_entry(a, struct mmap_link_addr, elem)->map_id
+    < hash_entry(b, struct mmap_link_addr, elem)->map_id;
 }
 
 bool mmap_fpt_init(struct hash *hash_table) {
@@ -60,21 +63,20 @@ bool mmap_fpt_init(struct hash *hash_table) {
 }
 
 bool insert_mmap_fpt(struct hash *hash_table, mapid_t map_id, void *page,
-    struct file *file, off_t offset, uint32_t page_space, bool is_writable,
-    struct hash_elem h_elem) {
+    struct file *file, off_t offset, uint32_t page_space, bool is_writable) {
         struct mmap_file_page *mmap_fp 
     = (struct mmap_file_page*) malloc(sizeof(struct mmap_file_page));
     
     if (mmap_fp == NULL) {
         return false;
     }
-    ASSERT(page_space <= PG_SIZE);
-    mmap_fp->mapid = mapid;
+    ASSERT(page_space <= PGSIZE);
+    mmap_fp->map_id = map_id;
     mmap_fp->page = page;
     mmap_fp->file = file;
     mmap_fp->offset = offset;
     mmap_fp->page_space = page_space;
-    mmap_fp->end_page = end_page;    
+    mmap_fp->is_writable = is_writable;    
 
     struct hash_elem *elem = hash_insert(hash_table, &mmap_fp->elem);
 
@@ -107,13 +109,13 @@ void delete_mmap_fpt(struct hash_elem *elem, void *aux UNUSED) {
     free(hash_entry(elem, struct mmap_file_page, elem));
 }
 
-static unsigned mmap_fpt_hash(const struct hash_elem *e, void *aux) {
+static unsigned mmap_fpt_hash(const struct hash_elem *e, void *aux UNUSED) {
   struct mmap_file_page *entry = hash_entry(e, struct mmap_file_page, elem);
   return hash_bytes(&entry->page, sizeof(entry->page));
 }
 
 static bool mmap_fpt_less(const struct hash_elem *a, 
-        const struct hash_elem *b, void *aux) {
+        const struct hash_elem *b, void *aux UNUSED) {
     return hash_entry(a, struct mmap_file_page, elem)->page
     < hash_entry(b, struct mmap_file_page, elem)->page;
 }
