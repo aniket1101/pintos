@@ -22,9 +22,8 @@ struct supp_page *get_supp_page_table(struct hash *hash_table, void *vaddr) {
     return entry == NULL ? NULL : hash_entry(entry, struct supp_page, elem);
 }
 
-void insert_supp_page_table(struct hash *hash_table,
-                                            void *vaddr,
-                                             enum page_status status) {
+void insert_supp_page_table(struct hash *hash_table, void *vaddr,
+                            enum page_status status) {
     ASSERT(hash_table != NULL);
     struct supp_page *el = (struct supp_page *) malloc(sizeof(struct supp_page));
     ASSERT(el != NULL);

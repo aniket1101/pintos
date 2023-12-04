@@ -4,8 +4,10 @@
 #include "userprog/syscall.h"
 #include "threads/thread.h"
 #include "threads/malloc.h"
+#include "threads/synch.h"
 
 static int total_fds; // Total number of fds created
+static struct lock fd_lock; // Lock on file descriptors
 
 static hash_hash_func fd_hash;
 static hash_less_func fd_less;
@@ -14,6 +16,7 @@ static hash_action_func fd_free;
 /* Initialise the fd system. */
 void fd_system_init(void) {
   total_fds = 0;
+  lock_init(&fd_lock);
 }
 
 /* Initialise thread t's fd hash table. */
@@ -47,7 +50,10 @@ struct fd *fd_add(struct file_info *info) {
   // Increment total numbers of fds (skiping console fds 0 and 1) 
   fd->fd_num = (total_fds++) + 2; 
 
+  lock_acquire(&fd_lock); // Acquire lock on fds
   info->num_fds++; // Increment number of fds pointing to info
+  lock_release(&fd_lock); // Release lock on fds
+
 
   // Insert fd to current thread's hash, returning NULL if insert fails
   return hash_insert(&thread_current()->fds, &fd->elem) == NULL ? fd : NULL; 

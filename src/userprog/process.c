@@ -28,6 +28,7 @@
 #include <hash.h>
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/mmap.h"
 
 
 #define PUSH_ESP(val, type) \
@@ -263,7 +264,7 @@ process_exit (void)
   struct thread *cur = thread_current ();
 
   fd_hash_destroy(); // Destroy this thread's hash table of fds
-
+  
   lock_filesys_access();
   // Allow this executable to be written to
   if (cur->file != NULL) {
@@ -581,7 +582,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         insert_supp_page_table(&t->supp_page_table, upage, ZERO);
       } else {
         insert_supp_page_table(&t->supp_page_table, upage, MMAPPED);
-        // Insert memory mapped file later
+        insert_mmap_fpt(&t->mmap_file_page_table, upage, file, ofs, 
+                        page_read_bytes, writable);
       }
       
       if (kpage == NULL){

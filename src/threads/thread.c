@@ -304,11 +304,18 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+
   fd_hash_init(t);
-  if (t->tid > 1) {
-    supp_page_table_init(&(t->supp_page_table));
-  }
-    // t->is_writable = true;
+
+  #ifdef VM
+    t->next_mapid = 0;
+    if (t->tid > 1) {
+      supp_page_table_init(&t->supp_page_table);
+      mmap_init(&t->mmap_link_addr_table);
+      mmap_fpt_init(&t->mmap_file_page_table);
+    }
+  #endif
+
   try_yield();  
   
   return tid;
@@ -691,7 +698,6 @@ init_thread (struct thread *t, const char *name, int priority)
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
-  supp_page_table_init(&(t->supp_page_table));
   intr_set_level (old_level);
 }
 

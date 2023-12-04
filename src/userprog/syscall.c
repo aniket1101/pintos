@@ -18,6 +18,9 @@
 #include "devices/input.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "vm/frame.h"
+#include "vm/page.h"
+#include "vm/mmap.h"
 
 // Calculate offset from esp according to argument number
 #define arg_esp_offs(argnum, esp) (esp + ((argnum + 1) * WORD_SIZE))
@@ -83,7 +86,7 @@ static inline int kernel_open (const char *file);
 static inline int kernel_read (int fd, void *buffer, unsigned length);
 static inline int kernel_write (int fd, const void *buffer, unsigned length);
 static inline void kernel_close (int fd);
-static inline int kernel_mmap (void *addr, struct file_info *info);
+static inline int kernel_mmap (void *addr, struct fd *fd);
 static inline void kernel_munmap (int mapping);
 
 void
@@ -232,11 +235,12 @@ static void handle_close(struct intr_frame *f) {
 /* Wrapper for kernel_mmap() */
 static void handle_mmap(struct intr_frame *f) {
   int fd_num = pop_arg(0, int);
-  void *addr = pop_arg(1, void *);
+  void *addr = pop_ptr_arg(1, void *);
   struct fd *fd_ = fd_lookup_safe(fd_num);
-  f->eax = kernel_mmap(addr, fd_->file_info);
+  f->eax = kernel_mmap(addr, fd_);
 }
 
+/* Wrapper for kernel_munmap() */
 static void handle_munmap(struct intr_frame *f) {
   int mapping = pop_arg(0, int);
   kernel_munmap(mapping);
@@ -444,8 +448,44 @@ static inline void kernel_close(int fd_num) {
   }
 }
 
-static inline int kernel_mmap(void *addr, struct file_info *info) {
+static inline int kernel_mmap(void *addr, struct fd *fd) {
+  mapid_t map_id = -1;
 
+  if (pg_ofs(addr) != 0) {
+    goto ret;
+  }
+
+  struct thread *t = thread_current();
+  struct file *file = fd->file_info->file;
+
+  if (file == NULL || addr == NULL || fd < 2) {
+    goto ret;
+  }
+
+  // lock_acquire(&filesys_lock);
+  uint32_t read_bytes = file_length(file);
+  // lock_release(&filesys_lock);
+
+  uint32_t zero_bytes = PGSIZE - read_bytes % PGSIZE;
+
+  if (read_bytes == 0) {
+    goto ret;
+  }
+
+  map_id = thread_current()->next_mapid;
+
+  uint32_t curr_page;
+  for (curr_page = 0; curr_page <= read_bytes; curr_page + PGSIZE) {
+    
+    insert_mmap_fpt(&(thread_current()->mmap_file_page_table), 
+      addr + curr_page, file, curr_page, PGSIZE, true);
+    insert_supp_page_table(&t->supp_page_table, addr + curr_page,
+                                              MMAPPED);
+  }
+  add_mmap(&t->mmap_link_addr_table, map_id, addr, curr_page + addr);
+  
+  ret:
+    return map_id;
 }
 
 static inline void kernel_munmap(int mapping) {
