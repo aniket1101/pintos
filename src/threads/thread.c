@@ -20,6 +20,7 @@
 #endif
 #ifdef VM
 #include "vm/page.h"
+#include "vm/mmap.h"
 #endif
 
 
@@ -308,7 +309,6 @@ thread_create (const char *name, int priority,
   fd_hash_init(t);
 
   #ifdef VM
-    t->next_mapid = 0;
     if (t->tid > 1) {
       supp_page_table_init(&t->supp_page_table);
       mmap_init(&t->mmap_link_addr_table);

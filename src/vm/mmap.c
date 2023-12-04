@@ -63,7 +63,7 @@ bool mmap_fpt_init(struct hash *hash_table) {
                                  &mmap_fpt_less, NULL);
 }
 
-bool insert_mmap_fpt(struct hash *hash_table, void *page,
+bool insert_mmap_fpt(struct hash *hash_table, mapid_t map_id, void *page,
     struct file *file, off_t offset, uint32_t page_space, bool is_writable) {
         struct mmap_file_page *mmap_fp 
     = (struct mmap_file_page*) malloc(sizeof(struct mmap_file_page));
@@ -72,7 +72,7 @@ bool insert_mmap_fpt(struct hash *hash_table, void *page,
         return false;
     }
     ASSERT(page_space <= PGSIZE);
-    mmap_fp->map_id = thread_current()->next_mapid++;
+    mmap_fp->map_id = map_id;
     mmap_fp->page = page;
     mmap_fp->file = file;
     mmap_fp->offset = offset;

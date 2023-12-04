@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <debug.h>
+#include "filesys/file.h"
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
 #include "userprog/process.h"
@@ -11,6 +12,7 @@
 #include "threads/vaddr.h"
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/mmap.h"
 #include "devices/swap.h"
 
 /* Number of page faults processed. */
@@ -186,8 +188,14 @@ page_fault (struct intr_frame *f)
             page->status = LOADED;
             break;
          case MMAPPED:
-         // Implement mapped files later
-         // Set writable according to file
+            struct mmap_file_page *mmap_fp = 
+            get_mmap_fpt(&t->mmap_file_page_table, vaddr);
+            writable = page->is_writable;
+            lock_filesys_access();
+            file_seek(mmap_fp->file, mmap_fp->offset);
+            file_read(mmap_fp->file, kaddr, mmap_fp->page_space);
+            unlock_filesys_access();
+            page->status = MMAPPED;
             break;
          case LOADED:
             PUTBUF("There should not be a fault from a page in memory!!"); 

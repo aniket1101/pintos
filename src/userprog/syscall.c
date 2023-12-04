@@ -87,7 +87,10 @@ static inline int kernel_read (int fd, void *buffer, unsigned length);
 static inline int kernel_write (int fd, const void *buffer, unsigned length);
 static inline void kernel_close (int fd);
 static inline int kernel_mmap (void *addr, struct fd *fd);
-static inline void kernel_munmap (int mapping);
+static inline void kernel_munmap (mapid_t mapping);
+
+/* Helper functions */
+static bool check_mapping(void *start, void *end);
 
 void
 syscall_init (void) 
@@ -242,7 +245,7 @@ static void handle_mmap(struct intr_frame *f) {
 
 /* Wrapper for kernel_munmap() */
 static void handle_munmap(struct intr_frame *f) {
-  int mapping = pop_arg(0, int);
+  int mapping = pop_arg(0, mapid_t);
   kernel_munmap(mapping);
 }
 
@@ -455,29 +458,30 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
     goto ret;
   }
 
-  struct thread *t = thread_current();
   struct file *file = fd->file_info->file;
-
-  if (file == NULL || addr == NULL || fd < 2) {
+  if (file == NULL || addr == NULL || fd->fd_num < 2) {
     goto ret;
   }
 
-  // lock_acquire(&filesys_lock);
+  lock_acquire(&filesys_lock);
   uint32_t read_bytes = file_length(file);
-  // lock_release(&filesys_lock);
+  lock_release(&filesys_lock);
 
-  uint32_t zero_bytes = PGSIZE - read_bytes % PGSIZE;
-
-  if (read_bytes == 0) {
+  if (read_bytes == 0 || check_mapping(addr, addr + read_bytes)) {
     goto ret;
   }
 
-  map_id = thread_current()->next_mapid;
+  struct thread *t = thread_current();
+  map_id = t->next_mapid++;
+
+  lock_acquire(&filesys_lock);
+  file = file_reopen(file);
+  lock_release(&filesys_lock);
 
   uint32_t curr_page;
-  for (curr_page = 0; curr_page <= read_bytes; curr_page + PGSIZE) {
+  for (curr_page = 0; curr_page <= read_bytes; curr_page += PGSIZE) {
     
-    insert_mmap_fpt(&(thread_current()->mmap_file_page_table), 
+    insert_mmap_fpt(&t->mmap_file_page_table, map_id,
       addr + curr_page, file, curr_page, PGSIZE, true);
     insert_supp_page_table(&t->supp_page_table, addr + curr_page,
                                               MMAPPED);
@@ -488,8 +492,42 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
     return map_id;
 }
 
-static inline void kernel_munmap(int mapping) {
-  
+static inline void kernel_munmap(mapid_t mapping) {
+  struct thread *t = thread_current();
+  struct mmap_link_addr *map_addr = get_mmap(&t->mmap_link_addr_table, mapping);
+  struct file *file = NULL;
+  for (void *curr = map_addr->start_page; curr < map_addr->end_page;
+      curr += PGSIZE) {
+        struct mmap_file_page *mmap_fp = get_mmap_fpt(&t->mmap_file_page_table,
+                                                  curr);
+        file = mmap_fp->file;
+        void *kaddr = pagedir_get_page(t->pagedir, curr);
+        if (kaddr != NULL) {
+          wipe_frame_memory(kaddr);
+          pagedir_clear_page(t->pagedir, curr);
+        }
+
+        delete_mmap_fp(&t->mmap_file_page_table, mmap_fp);
+        remove_supp_page(&t->supp_page_table, curr);
+  }
+
+  delete_mmap(&t->mmap_link_addr_table, mapping);
+      
+  lock_acquire(&filesys_lock);
+  file_close(file);
+  lock_release(&filesys_lock);
+}
+
+static bool check_mapping(void *start, void *end) {
+  ASSERT(start < end);
+
+  struct thread *t = thread_current();
+  for(; start <= end; start += PGSIZE) {
+    if (get_supp_page_table(&t->supp_page_table, start) != NULL) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /* Acquires filesys lock. */
