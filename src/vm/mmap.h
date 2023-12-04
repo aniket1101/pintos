@@ -1,13 +1,13 @@
 #include <stdlib.h>
+#include <hash.h>
 
 typedef int mapid_t;
 
-struct mmap_file {
-    int fd;
-    int size;
-    void *start_page;
+struct mmap_link_addr {
     mapid_t map_id;
-    struct list page_list;
+    void *start_page;
+    void *end_page;
+    struct hash_elem elem;
 };
 
 struct mmap_file_page {
@@ -18,5 +18,4 @@ struct mmap_file_page {
     int page_space;
     bool is_writable;
     struct hash_elem h_elem;
-    struct list_elem l_elem;
 }
