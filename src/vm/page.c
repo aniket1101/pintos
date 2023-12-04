@@ -26,11 +26,11 @@ void insert_supp_page_table(struct hash *hash_table,
                                             void *vaddr,
                                              enum page_status status) {
     ASSERT(hash_table != NULL);
-    struct supp_page *el = malloc(sizeof(struct supp_page));
+    struct supp_page *el = (struct supp_page *) malloc(sizeof(struct supp_page));
     ASSERT(el != NULL);
     el->vaddr = pg_round_down(vaddr);
     el->status = status;
-    struct hash_elem *entry = hash_insert(hash_table, &el->elem);
+    struct hash_elem *entry = hash_insert(hash_table, &(el->elem));
     if (entry != NULL) {
         hash_entry(entry, struct supp_page, elem)->status = status;
     }
@@ -38,7 +38,7 @@ void insert_supp_page_table(struct hash *hash_table,
 
 static unsigned supp_page_table_hash(const struct hash_elem *e, void *aux) {
   struct supp_page *entry = hash_entry(e, struct supp_page, elem);
-  return hash_bytes(entry->vaddr, sizeof(entry->vaddr));
+  return hash_bytes(&entry->vaddr, sizeof(entry->vaddr));
 }
 
 static bool supp_page_table_less(const struct hash_elem *a, 
