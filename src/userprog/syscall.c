@@ -238,7 +238,7 @@ static void handle_close(struct intr_frame *f) {
 /* Wrapper for kernel_mmap() */
 static void handle_mmap(struct intr_frame *f) {
   int fd_num = pop_arg(0, int);
-  void *addr = pop_ptr_arg(1, void *);
+  void *addr = pop_arg(1, void *);
   struct fd *fd_ = fd_lookup_safe(fd_num);
   f->eax = kernel_mmap(addr, fd_);
 }
