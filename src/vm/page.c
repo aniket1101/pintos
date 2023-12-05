@@ -59,8 +59,10 @@ struct supp_page *supp_page_init(void *vaddr, enum page_status status) {
 	 Returns NULL if nothing found. */
 struct supp_page *supp_page_lookup(void *vaddr) {
     struct supp_page page = {.vaddr = vaddr};
-    struct hash_elem *found_elem // Return NULL if no supp_page found
+    struct hash_elem *found_elem 
 			= hash_find(&thread_current()->supp_page_table, &page.elem);
+		
+		// Return NULL if no supp_page found, otherwise return found page
     return found_elem == NULL ? NULL : hash_entry(found_elem, struct supp_page, elem);
 }
 
