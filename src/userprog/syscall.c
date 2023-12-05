@@ -495,11 +495,19 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
 static inline void kernel_munmap(mapid_t mapping) {
   struct thread *t = thread_current();
   struct mmap_link_addr *map_addr = get_mmap(&t->mmap_link_addr_table, mapping);
+
+  if (map_addr == NULL) {
+    return;
+  }
+
   struct file *file = NULL;
   for (void *curr = map_addr->start_page; curr < map_addr->end_page;
       curr += PGSIZE) {
         struct mmap_file_page *mmap_fp = get_mmap_fpt(&t->mmap_file_page_table,
                                                   curr);
+        if (mmap_fp == NULL) {
+          return;
+        }
         file = mmap_fp->file;
         void *kaddr = pagedir_get_page(t->pagedir, curr);
         if (kaddr != NULL) {
