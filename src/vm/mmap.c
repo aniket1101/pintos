@@ -30,7 +30,7 @@ bool add_mmap(struct hash *hash_table, mapid_t map_id, void *start_page,
 
     struct hash_elem *elem = hash_insert(hash_table, &map_link->elem);
 
-    return elem == NULL;
+    return elem != NULL;
  }
 
  struct mmap_link_addr *get_mmap(struct hash *hash_table, mapid_t map_id) {
@@ -81,7 +81,7 @@ bool insert_mmap_fpt(struct hash *hash_table, mapid_t map_id, void *page,
 
     struct hash_elem *elem = hash_insert(hash_table, &mmap_fp->elem);
 
-    return elem == NULL;
+    return elem != NULL;
 }
 
 struct mmap_file_page *get_mmap_fpt(struct hash *hash_table, void *page) {
