@@ -24,7 +24,7 @@ struct supp_page {
 bool supp_page_table_init(struct hash *hash_table);
 void supp_page_table_destroy(struct hash *hash_table);
 struct supp_page *get_supp_page_table(struct hash *hash_table, void *vaddr);
-void insert_supp_page_table(struct hash *hash_table, void *vaddr, 
+struct supp_page *insert_supp_page_table(struct hash *hash_table, void *vaddr, 
                             enum page_status status);
 void remove_supp_page(struct hash *hash_table, void *vaddr);
 

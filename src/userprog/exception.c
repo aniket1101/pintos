@@ -15,6 +15,9 @@
 #include "vm/mmap.h"
 #include "devices/swap.h"
 
+#define STACK_LIMIT (8 * (1 << 20))
+#define PUSH_OVERFLOW 32
+
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -170,51 +173,55 @@ page_fault (struct intr_frame *f)
    /* If the page does not exists then kill the process*/
    if (page == NULL) {
       // Check for stack growth, otherwise exit and free
-      kernel_exit(-1);
-   } else {
-      /* Get the kernel address using the frame. */
-      void *kaddr = put_frame(PAL_USER, vaddr);
-      bool writable = true;
-
-      /* Depending on page status... */
-      switch(page->status) {                                                          
-         case SWAPPED:
-            // Handle swap by lazy loading
-            swap_in(vaddr, (size_t) kaddr);
-            page->status = LOADED;
-            break;
-         case ZERO:
-         /* Page from from is also zeroed out */
-            page->status = LOADED;
-            break;
-         case MMAPPED:
-            struct mmap_file_page *mmap_fp = 
-            get_mmap_fpt(&t->mmap_file_page_table, vaddr);
-            writable = page->is_writable;
-            lock_filesys_access();
-            file_seek(mmap_fp->file, mmap_fp->offset);
-            file_read(mmap_fp->file, kaddr, mmap_fp->page_space);
-            unlock_filesys_access();
-            page->status = MMAPPED;
-            break;
-         case LOADED:
-            PUTBUF("There should not be a fault from a page in memory!!"); 
-            break;
-         default:
-            PUTBUF("Unrecognised page status!!");
-            NOT_REACHED();
-      }
-      install_page(vaddr, kaddr, writable);
+		if (PHYS_BASE - vaddr > STACK_LIMIT || (f->esp - fault_addr) > PUSH_OVERFLOW) {
+			kernel_exit(-1);
+		}
+	
+		page = insert_supp_page_table(&t->supp_page_table, vaddr, ZERO);
    }
 
+	/* Get the kernel address using the frame. */
+	void *kaddr = put_frame(PAL_USER, vaddr);
+	bool writable = true;
+
+	/* Depending on page status... */
+	switch(page->status) {                                                          
+		case SWAPPED:
+			// Handle swap by lazy loading
+			swap_in(vaddr, (size_t) kaddr);
+			page->status = LOADED;
+			break;
+		case ZERO:
+		/* Page from from is also zeroed out */
+			page->status = LOADED;
+			break;
+		case MMAPPED:
+			struct mmap_file_page *mmap_fp = 
+			get_mmap_fpt(&t->mmap_file_page_table, vaddr);
+			writable = page->is_writable;
+			lock_filesys_access();
+			file_seek(mmap_fp->file, mmap_fp->offset);
+			file_read(mmap_fp->file, kaddr, mmap_fp->page_space);
+			unlock_filesys_access();
+			page->status = MMAPPED;
+			break;
+		case LOADED:
+			PUTBUF("There should not be a fault from a page in memory!!"); 
+			break;
+		default:
+			PUTBUF("Unrecognised page status!!");
+			NOT_REACHED();
+	}
+
+	install_page(vaddr, kaddr, writable);
 
    /* To implement virtual memory, delete the rest of the function
       body, and replace it with code that brings in the page to
       which fault_addr refers. */
-   printf("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-   kill (f);
+   // printf("Page fault at %p: %s error %s page in %s context.\n",
+   //        fault_addr,
+   //        not_present ? "not present" : "rights violation",
+   //        write ? "writing" : "reading",
+   //        user ? "user" : "kernel");
+   // kill (f);
 }

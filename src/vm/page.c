@@ -44,7 +44,7 @@ struct supp_page *get_supp_page_table(struct hash *hash_table, void *vaddr) {
     return entry == NULL ? NULL : hash_entry(entry, struct supp_page, elem);
 }
 
-void insert_supp_page_table(struct hash *hash_table, void *vaddr,
+struct supp_page *insert_supp_page_table(struct hash *hash_table, void *vaddr,
                             enum page_status status) {
     ASSERT(hash_table != NULL);
     struct supp_page *el = (struct supp_page *) malloc(sizeof(struct supp_page));
@@ -55,6 +55,7 @@ void insert_supp_page_table(struct hash *hash_table, void *vaddr,
     if (entry != NULL) {
         hash_entry(entry, struct supp_page, elem)->status = status;
     }
+    return el;
 }
 
 void remove_supp_page(struct hash *hash_table, void *vaddr) {
