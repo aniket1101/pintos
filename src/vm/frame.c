@@ -1,5 +1,6 @@
 #include "frame.h"
 #include <hash.h>
+#include "filesys/file.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
@@ -9,6 +10,8 @@
 #include "userprog/pagedir.h"
 #include "userprog/debug.h"
 #include "devices/swap.h"
+#include "vm/page.h"
+#include "vm/mmap.h"
 
 
 static hash_hash_func frame_table_hash;
@@ -108,6 +111,36 @@ struct frame *choose_frame(void) {
 }
 
 void evict_frame(struct frame *frame) {
+  struct supp_page *page = get_supp_page_table(&frame->t->supp_page_table,
+                                              frame->uaddr);
+  struct thread *t = frame->t;
+  switch (page->status)
+  {
+  case LOADED:
+    /* Swap out from physical memory to disk*/
+    pagedir_clear_page(t->pagedir, frame->uaddr);
+    swap_out(frame->uaddr);
+    page->status = SWAPPED;
+    break;
+
+  case MMAPPED:
+    if(pagedir_is_dirty(t->pagedir, frame->uaddr)) {
+      pagedir_clear_page(t->pagedir, frame->uaddr);
+      struct mmap_file_page *mmap_fp = get_mmap_fpt(&t->mmap_file_page_table,
+                                                    frame->uaddr);
+      lock_filesys_access();
+      file_seek(mmap_fp->file, mmap_fp->offset);
+      file_read(mmap_fp->file, frame->kaddr, mmap_fp->page_space);
+      unlock_filesys_access();
+    }
+    break;
+  
+  case ZERO:
+  case SWAPPED:
+  default:
+    PUTBUF_FORMAT("This page type shouldn't be in memory!!: %d", page->status);
+    break;
+  }
     if (frame != NULL) {
       free_frame(frame->kaddr);
     }
