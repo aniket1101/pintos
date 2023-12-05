@@ -14,6 +14,10 @@
 #include "vm/page.h"
 #include "vm/mmap.h"
 #include "devices/swap.h"
+#include "debug.h"
+
+#define STACK_LIMIT (8 * (1 << 20))
+#define PUSH_OVERFLOW 32
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -130,8 +134,8 @@ static void
 page_fault (struct intr_frame *f) 
 {
    bool not_present;  /* True: not-present page, false: writing r/o page. */
-   bool write;        /* True: access was write, false: access was read. */
-   bool user;         /* True: access by user, false: access by kernel. */
+   bool write UNUSED; /* True: access was write, false: access was read. */
+   bool user UNUSED;  /* True: access by user, false: access by kernel. */
    void *fault_addr;  /* Fault address. */
    struct thread *t = thread_current(); /* The current thread. */
 
@@ -165,7 +169,7 @@ page_fault (struct intr_frame *f)
    void* vaddr = pg_round_down(fault_addr);
 
    /* Get the relevant page from this thread's page table. */
-   struct supp_page *page = get_supp_page_table(&t->supp_page_table, vaddr);
+   struct supp_page *page = supp_page_lookup(vaddr);
 
    /* If the page does not exists then kill the process*/
    if (page == NULL) {

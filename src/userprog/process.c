@@ -579,15 +579,14 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
 
       if (page_zero_bytes == PGSIZE) {
-        insert_supp_page_table(&t->supp_page_table, upage, ZERO);
+        supp_page_init(upage, ZERO);
       } else {
-        insert_supp_page_table(&t->supp_page_table, upage, MMAPPED);
+        supp_page_init(upage, MMAPPED);
         insert_mmap_fpt(&t->mmap_file_page_table, 0, upage, file, ofs, 
                         page_read_bytes, writable);
       }
       
-      if (kpage == NULL){
-        
+      if (kpage == NULL) {
         /* Get a new page of memory. */
         kpage = put_frame (PAL_USER, upage);
         if (kpage == NULL){

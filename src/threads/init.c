@@ -36,6 +36,7 @@
 #ifdef VM
 #include "devices/swap.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 #endif
 #ifdef FILESYS
 #include "devices/block.h"
@@ -143,6 +144,8 @@ main (void)
 #ifdef VM
   /* Initialise the swap disk */  
   swap_init ();
+  /* Initialise the supplemental page table */
+  supp_page_table_system_init();
   /* Initialise frame table */
   frame_init();
 #endif

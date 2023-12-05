@@ -2,6 +2,7 @@
 #define VM_PAGE_H
 
 #include <hash.h>
+#include "../threads/thread.h"
 
 enum page_status {
     SWAPPED,                    /* Swapped out */
@@ -12,23 +13,23 @@ enum page_status {
 
 struct supp_page {
     void *vaddr;                /* Virtual memory address for a page */
-    enum page_status status;         /* Status of a page */
+    enum page_status status;    /* Status of a page */
+    
     uint32_t read_bytes;        /* A page's read bytes */
     uint32_t zero_bytes;        /* A page's zero bytes */
+    
     uint8_t *upage;             /* upage for the page */
     bool is_writable;           /* Tracks whether a page can be written to */
+    
     struct hash_elem elem;      /* Allows for hash of pages */
 };
 
 
-bool supp_page_table_init(struct hash *hash_table);
-void supp_page_table_destroy(struct hash *hash_table);
-struct supp_page *get_supp_page_table(struct hash *hash_table, void *vaddr);
-void insert_supp_page_table(struct hash *hash_table, void *vaddr, 
-                            enum page_status status);
-void remove_supp_page(struct hash *hash_table, void *vaddr);
-
-
-
+void supp_page_table_system_init(void);
+void supp_page_table_init(struct thread *t);
+struct supp_page *supp_page_init(void *vaddr, enum page_status status);
+struct supp_page *supp_page_lookup(void *vaddr);
+bool supp_page_remove(void *vaddr);
+void supp_page_table_destroy(struct thread *t);
 
 #endif /* vm/page.h*/

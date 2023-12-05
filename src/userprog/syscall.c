@@ -483,8 +483,7 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
     
     insert_mmap_fpt(&t->mmap_file_page_table, map_id,
       addr + curr_page, file, curr_page, PGSIZE, true);
-    insert_supp_page_table(&t->supp_page_table, addr + curr_page,
-                                              MMAPPED);
+    supp_page_init(addr + curr_page, MMAPPED);
   }
   add_mmap(&t->mmap_link_addr_table, map_id, addr, curr_page + addr);
   
@@ -508,7 +507,7 @@ static inline void kernel_munmap(mapid_t mapping) {
         }
 
         delete_mmap_fp(&t->mmap_file_page_table, mmap_fp);
-        remove_supp_page(&t->supp_page_table, curr);
+        supp_page_remove(curr);
   }
 
   delete_mmap(&t->mmap_link_addr_table, mapping);
@@ -520,13 +519,12 @@ static inline void kernel_munmap(mapid_t mapping) {
 
 static bool check_mapping(void *start, void *end) {
   ASSERT(start < end);
-
-  struct thread *t = thread_current();
   for(; start <= end; start += PGSIZE) {
-    if (get_supp_page_table(&t->supp_page_table, start) != NULL) {
+    if (supp_page_lookup(start) != NULL) {
       return true;
     }
   }
+
   return false;
 }
 
