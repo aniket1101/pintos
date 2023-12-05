@@ -44,13 +44,15 @@ struct supp_page *get_supp_page_table(struct hash *hash_table, void *vaddr) {
     return entry == NULL ? NULL : hash_entry(entry, struct supp_page, elem);
 }
 
-void insert_supp_page_table(struct hash *hash_table, void *vaddr,
+void insert_supp_page_table(struct hash *hash_table, void *vaddr, uint32_t read_bytes,
                             enum page_status status) {
     ASSERT(hash_table != NULL);
     struct supp_page *el = (struct supp_page *) malloc(sizeof(struct supp_page));
     ASSERT(el != NULL);
     el->vaddr = pg_round_down(vaddr);
     el->status = status;
+    el->read_bytes = read_bytes;
+    el->zero_bytes = PGSIZE - read_bytes;
     struct hash_elem *entry = hash_insert(hash_table, &(el->elem));
     if (entry != NULL) {
         hash_entry(entry, struct supp_page, elem)->status = status;
