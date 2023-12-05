@@ -1,17 +1,26 @@
+#ifndef VM_FRAME_H
+#define VM_FRAME_H
+
 #include <hash.h>
 #include "threads/palloc.h"
 
-void frame_init(void);
-void *get_frame(void *upage);
-void *put_frame(enum palloc_flags flag, void *upage);
-struct frame *choose_frame(void);
-void evict_frame(struct frame *frame);
-bool wipe_frame_memory(void *kaddr);
-void free_frame(void *kaddr);
-
 struct frame {
-    struct thread *t;
-    void *uaddr;
-    void *kaddr;
+    struct thread *t; /* Thread with page in pagedir. */
+
+    void *vaddr;      /* Virtual address of frame's page. */
+    void *paddr;      /* Physical address of frame's page. */
+
     struct hash_elem elem;
 };
+
+void frame_table_init(void);
+
+struct frame *frame_init(enum palloc_flags flag, void *upage);
+struct frame *frame_lookup(void *upage);
+void *frame_get_paddr(void *upage);
+
+void evict_frame(void);
+void free_frame(struct frame *frame);
+void frame_table_destroy(void);
+
+#endif /* vm/frame.h*/

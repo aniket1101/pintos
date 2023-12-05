@@ -177,14 +177,15 @@ page_fault (struct intr_frame *f)
       kernel_exit(-1);
    } else {
       /* Get the kernel address using the frame. */
-      void *kaddr = put_frame(PAL_USER, vaddr);
+      struct frame *frame = frame_init(PAL_USER, vaddr);
+      ASSERT(frame != NULL);
       bool writable = true;
 
       /* Depending on page status... */
       switch(page->status) {                                                          
          case SWAPPED:
             // Handle swap by lazy loading
-            swap_in(vaddr, (size_t) kaddr);
+            swap_in(vaddr, (size_t) frame->paddr);
             page->status = LOADED;
             break;
          case ZERO:
@@ -193,11 +194,11 @@ page_fault (struct intr_frame *f)
             break;
          case MMAPPED:
             struct mmap_file_page *mmap_fp = 
-            get_mmap_fpt(&t->mmap_file_page_table, vaddr);
+               get_mmap_fpt(&t->mmap_file_page_table, vaddr);
             writable = page->is_writable;
             lock_filesys_access();
             file_seek(mmap_fp->file, mmap_fp->offset);
-            file_read(mmap_fp->file, kaddr, mmap_fp->page_space);
+            file_read(mmap_fp->file, frame->paddr, mmap_fp->page_space);
             unlock_filesys_access();
             page->status = MMAPPED;
             break;
@@ -208,17 +209,18 @@ page_fault (struct intr_frame *f)
             PUTBUF("Unrecognised page status!!");
             NOT_REACHED();
       }
-      install_page(vaddr, kaddr, writable);
+
+      install_page(vaddr, frame->paddr, writable);
    }
 
 
    /* To implement virtual memory, delete the rest of the function
       body, and replace it with code that brings in the page to
       which fault_addr refers. */
-   printf("Page fault at %p: %s error %s page in %s context.\n",
-          fault_addr,
-          not_present ? "not present" : "rights violation",
-          write ? "writing" : "reading",
-          user ? "user" : "kernel");
-   kill (f);
+   // printf("Page fault at %p: %s error %s page in %s context.\n",
+   //        fault_addr,
+   //        not_present ? "not present" : "rights violation",
+   //        write ? "writing" : "reading",
+   //        user ? "user" : "kernel");
+   // kill (f);
 }

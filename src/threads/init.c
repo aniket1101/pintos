@@ -130,10 +130,6 @@ main (void)
   serial_init_queue ();
   timer_calibrate ();
 
-#ifdef VM
-  frame_init();
-#endif
-
 #ifdef FILESYS
   /* Initialize file system. */
   ide_init ();
@@ -147,7 +143,7 @@ main (void)
   /* Initialise the supplemental page table */
   supp_page_table_system_init();
   /* Initialise frame table */
-  frame_init();
+  frame_table_init();
 #endif
 
   printf ("Boot complete.\n");
@@ -158,6 +154,10 @@ main (void)
 #ifdef USERPROG
   pc_link_hash_destroy();
   file_info_hash_destroy();
+#endif
+
+#ifdef VM 
+  frame_table_destroy();
 #endif
   
   /* Finish up. */

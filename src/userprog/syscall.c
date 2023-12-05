@@ -502,7 +502,7 @@ static inline void kernel_munmap(mapid_t mapping) {
         file = mmap_fp->file;
         void *kaddr = pagedir_get_page(t->pagedir, curr);
         if (kaddr != NULL) {
-          wipe_frame_memory(kaddr);
+          free(frame_lookup(kaddr));
           pagedir_clear_page(t->pagedir, curr);
         }
 
