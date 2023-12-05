@@ -28,6 +28,8 @@
 #include <hash.h>
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/mmap.h"
+
 
 #define PUSH_ESP(val, type) \
   if_->esp -= sizeof(type); \
@@ -564,7 +566,61 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT (ofs % PGSIZE == 0);
 
   file_seek (file, ofs);
-  setup_lazy(read_bytes, zero_bytes, upage, upage, writable, 0, file);
+  while (read_bytes > 0 || zero_bytes > 0) 
+    {
+      /* Calculate how to fill this page.
+         We will read PAGE_READ_BYTES bytes from FILE
+         and zero the final PAGE_ZERO_BYTES bytes. */
+      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+      
+      /* Check if virtual page already allocated */
+      struct thread *t = thread_current ();
+      uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
+
+      if (page_zero_bytes == PGSIZE) {
+        insert_supp_page_table(&t->supp_page_table, upage, ZERO);
+      } else {
+        insert_supp_page_table(&t->supp_page_table, upage, MMAPPED);
+        insert_mmap_fpt(&t->mmap_file_page_table, 0, upage, file, ofs, 
+                        page_read_bytes, writable);
+      }
+      
+      if (kpage == NULL){
+        
+        /* Get a new page of memory. */
+        kpage = put_frame (PAL_USER, upage);
+        if (kpage == NULL){
+          return false;
+        }
+        
+        /* Add the page to the process's address space. */
+        if (!install_page (upage, kpage, writable)) 
+        {
+          free_frame (kpage);
+          return false; 
+        }     
+        
+      } else {
+        
+        /* Check if writable flag for the page should be updated */
+        if(writable && !pagedir_is_writable(t->pagedir, upage)){
+          pagedir_set_writable(t->pagedir, upage, writable); 
+        }
+        
+      }
+
+      /* Load data into the page. */
+      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes){
+        return false; 
+      }
+      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+      /* Advance. */
+      read_bytes -= page_read_bytes;
+      zero_bytes -= page_zero_bytes;
+      upage += PGSIZE;
+    }
   return true;
 }
 

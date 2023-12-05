@@ -28,13 +28,12 @@
 #include "userprog/fd.h"
 #include "userprog/exception.h"
 #include "userprog/gdt.h"
-#include "userprog/tss.h"
 #include "userprog/syscall.h"
+#include "userprog/tss.h"
 #else
 #include "tests/threads/tests.h"
 #endif
 #ifdef VM
-#include "vm/mmap.h"
 #include "devices/swap.h"
 #include "vm/frame.h"
 #endif

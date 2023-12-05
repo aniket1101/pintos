@@ -19,6 +19,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 #include "vm/mmap.h"
 
 // Calculate offset from esp according to argument number
@@ -472,42 +473,23 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
 
   struct thread *t = thread_current();
   map_id = t->next_mapid++;
-  uint32_t zero_bytes = PGSIZE - (read_bytes % PGSIZE);
 
   lock_acquire(&filesys_lock);
   file = file_reopen(file);
   lock_release(&filesys_lock);
 
   uint32_t curr_page;
-  setup_lazy(read_bytes, zero_bytes, upage, upage, writable, map_id, file);
+  for (curr_page = 0; curr_page <= read_bytes; curr_page += PGSIZE) {
+    
+    insert_mmap_fpt(&t->mmap_file_page_table, map_id,
+      addr + curr_page, file, curr_page, PGSIZE, true);
+    insert_supp_page_table(&t->supp_page_table, addr + curr_page,
+                                              MMAPPED);
+  }
   add_mmap(&t->mmap_link_addr_table, map_id, addr, curr_page + addr);
   
   ret:
     return map_id;
-}
-
-void setup_lazy(uint32_t read_bytes, uint32_t zero_bytes, void *upage, void *start, 
-  bool writable, mapid_t map_id, struct file *file) {
-  
-  while (read_bytes > 0 || zero_bytes > 0) 
-    {
-      /* Calculate how to fill this page.
-          We will read PAGE_READ_BYTES bytes from FILE
-          and zero the final PAGE_ZERO_BYTES bytes. */
-      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-      size_t page_zero_bytes = PGSIZE - page_read_bytes;
-      
-      /* Check if virtual page already allocated */
-      struct thread *t = thread_current ();
-
-      insert_mmap_fpt(&t->mmap_file_page_table, map_id, start, file, upage, PGSIZE, true);
-      insert_supp_page_table(&t->supp_page_table, upage, MMAPPED);
-
-      /* Advance. */
-      read_bytes -= page_read_bytes;
-      zero_bytes -= page_zero_bytes;
-      upage += PGSIZE;
-    }
 }
 
 static inline void kernel_munmap(mapid_t mapping) {
