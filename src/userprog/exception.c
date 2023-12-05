@@ -134,8 +134,8 @@ static void
 page_fault (struct intr_frame *f) 
 {
    bool not_present;  /* True: not-present page, false: writing r/o page. */
-   bool write;        /* True: access was write, false: access was read. */
-   bool user;         /* True: access by user, false: access by kernel. */
+   bool write UNUSED; /* True: access was write, false: access was read. */
+   bool user UNUSED;  /* True: access by user, false: access by kernel. */
    void *fault_addr;  /* Fault address. */
    struct thread *t = thread_current(); /* The current thread. */
 
@@ -174,10 +174,10 @@ page_fault (struct intr_frame *f)
    /* If the page does not exists then kill the process*/
    if (page == NULL) {
       // Check for stack growth, otherwise exit and free
-		if (PHYS_BASE - vaddr > STACK_LIMIT) {
-         uint32_t diff = f->esp - fault_addr;
-         if (diff != PUSHA_OVERFLOW && diff != PUSH_OVERFLOW)
-            kernel_exit(-1);
+      uint32_t diff = f->esp - fault_addr;
+		if (PHYS_BASE - vaddr > STACK_LIMIT
+            || (diff > 0 && diff != PUSHA_OVERFLOW && diff != PUSH_OVERFLOW)) {
+         kernel_exit(-1);
 		}
 	
 		page = insert_supp_page_table(&t->supp_page_table, vaddr, ZERO);
