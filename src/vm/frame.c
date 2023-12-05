@@ -143,8 +143,9 @@ void evict_frame(struct frame *frame) {
   }
     if (frame != NULL) {
       free_frame(frame->kaddr);
+    } else {
+      kernel_exit(-1);
     }
-    kernel_exit(-1);
 }
 
 bool wipe_frame_memory(void *kaddr) {
