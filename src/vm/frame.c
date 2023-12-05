@@ -88,7 +88,7 @@ struct frame *choose_frame(void) {
       while (true) {
         struct frame *frame = hash_entry(hash_cur(&i), struct frame, elem);
         // havent checked for aliases?
-        if (!pagedir_is_accessed(frame->kaddr, frame->uaddr)) {
+        if (pagedir_is_accessed(frame->kaddr, frame->uaddr)) {
           if (pagedir_is_dirty(frame->kaddr, frame->uaddr)) {
             // need to check if its in mmap?
             swap_in(frame->uaddr, sizeof(frame));
