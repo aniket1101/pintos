@@ -16,7 +16,8 @@
 #include "devices/swap.h"
 
 #define STACK_LIMIT (8 * (1 << 20))
-#define PUSH_OVERFLOW 32
+#define PUSHA_OVERFLOW 32
+#define PUSH_OVERFLOW 4
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -173,8 +174,10 @@ page_fault (struct intr_frame *f)
    /* If the page does not exists then kill the process*/
    if (page == NULL) {
       // Check for stack growth, otherwise exit and free
-		if (PHYS_BASE - vaddr > STACK_LIMIT || (f->esp - fault_addr) > PUSH_OVERFLOW) {
-			kernel_exit(-1);
+		if (PHYS_BASE - vaddr > STACK_LIMIT) {
+         uint32_t diff = f->esp - fault_addr;
+         if (diff != PUSHA_OVERFLOW && diff != PUSH_OVERFLOW)
+            kernel_exit(-1);
 		}
 	
 		page = insert_supp_page_table(&t->supp_page_table, vaddr, ZERO);
