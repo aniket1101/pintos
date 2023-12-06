@@ -28,18 +28,18 @@ void frame_table_init(void) {
 
 static unsigned frame_hash(const struct hash_elem *e, void *aux UNUSED) {
   struct frame *frame = hash_entry(e, struct frame, elem);
-  return hash_int((uint32_t) frame->paddr);
+  return hash_int((uint32_t) frame->kaddr);
 }
 
 static bool frame_less(const struct hash_elem *a, 
     const struct hash_elem *b, void *aux UNUSED) {
-  return hash_entry(a, struct frame, elem)->paddr
-      < hash_entry(b, struct frame, elem)->paddr;
+  return hash_entry(a, struct frame, elem)->kaddr
+      < hash_entry(b, struct frame, elem)->kaddr;
 }
 
 /* Initialise a frame entry with flag and vaddr and insert into frame_table. 
    PAL_USER will be used as a flag whether passed as argument or not. */
-struct frame *frame_init(enum palloc_flags flag, void *vaddr) {
+struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   ASSERT(is_user_vaddr(vaddr));
   lock_acquire(&frame_lock);      
 
@@ -55,16 +55,16 @@ struct frame *frame_init(enum palloc_flags flag, void *vaddr) {
     return frame; 
   }
 
-  void *paddr = palloc_get_page(PAL_USER | flag);  
-  if (paddr == NULL) { // If no pages left
+  void *kaddr = palloc_get_page(PAL_USER | flag);  
+  if (kaddr == NULL) { // If no pages left
     evict_frame(); // Evict a frame
     // Get a new page, asserting that there is now a free page
-    paddr = palloc_get_page(PAL_USER | PAL_ASSERT | flag); 
+    kaddr = palloc_get_page(PAL_USER | PAL_ASSERT | flag); 
   }
 
   frame->t = thread_current();
   frame->vaddr = vaddr;
-  frame->paddr = paddr;
+  frame->kaddr = kaddr;
 
   hash_insert(&frame_table, &frame->elem);
   // if (hash_insert(&frame_table, &frame->elem) != NULL) {
@@ -84,8 +84,8 @@ struct frame *frame_lookup(void *vaddr) {
     return found_elem == NULL ? NULL : hash_entry(found_elem, struct frame, elem);
 }
 
-void *frame_get_paddr(void *vaddr) {
-  return frame_lookup(vaddr)->paddr;
+void *frame_lookup_kaddr(void *vaddr) {
+  return frame_lookup(vaddr)->kaddr;
 }
 
 void evict_frame(void) {

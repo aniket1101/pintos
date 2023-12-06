@@ -177,7 +177,7 @@ page_fault (struct intr_frame *f)
       kernel_exit(-1);
    } else {
       /* Get the kernel address using the frame. */
-      struct frame *frame = frame_init(PAL_USER, vaddr);
+      struct frame *frame = frame_put(vaddr, PAL_USER);
       ASSERT(frame != NULL);
       bool writable = true;
 
@@ -185,7 +185,7 @@ page_fault (struct intr_frame *f)
       switch(page->status) {                                                          
          case SWAPPED:
             // Handle swap by lazy loading
-            swap_in(vaddr, (size_t) frame->paddr);
+            swap_in(vaddr, (size_t) frame->kaddr);
             page->status = LOADED;
             break;
          case ZERO:
@@ -198,7 +198,7 @@ page_fault (struct intr_frame *f)
             writable = page->is_writable;
             lock_filesys_access();
             file_seek(mmap_fp->file, mmap_fp->offset);
-            file_read(mmap_fp->file, frame->paddr, mmap_fp->page_space);
+            file_read(mmap_fp->file, frame->kaddr, mmap_fp->page_space);
             unlock_filesys_access();
             page->status = MMAPPED;
             break;
@@ -210,7 +210,7 @@ page_fault (struct intr_frame *f)
             NOT_REACHED();
       }
 
-      install_page(vaddr, frame->paddr, writable);
+      install_page(vaddr, frame->kaddr, writable);
    }
 
 

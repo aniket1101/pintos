@@ -587,11 +587,11 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       
       if (kpage == NULL) {
         /* Get a new page of memory. */
-        struct frame *new_frame = frame_init (PAL_USER, upage);
+        struct frame *new_frame = frame_put (upage, PAL_USER);
         if (new_frame == NULL) {
           return false;
         }
-        kpage = new_frame->paddr; 
+        kpage = new_frame->kaddr; 
         
         /* Add the page to the process's address space. */
         if (!install_page (upage, kpage, writable)) {
@@ -628,9 +628,9 @@ setup_stack (void **esp)
   bool success = false;
 
   // Need to take into account the zeroed
-  struct frame *frame = frame_init(PAL_USER | PAL_ZERO, PHYS_BASE - PGSIZE);
+  struct frame *frame = frame_put(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
   if (frame != NULL) {
-    success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, frame->paddr, true);
+    success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, frame->kaddr, true);
     if (success) {
       *esp = PHYS_BASE;
     } else {  
