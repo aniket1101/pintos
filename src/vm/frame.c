@@ -28,13 +28,13 @@ void frame_table_init(void) {
 
 static unsigned frame_hash(const struct hash_elem *e, void *aux UNUSED) {
   struct frame *frame = hash_entry(e, struct frame, elem);
-  return hash_int((uint32_t) frame->kaddr);
+  return hash_int((uint32_t) frame->vaddr);
 }
 
 static bool frame_less(const struct hash_elem *a, 
     const struct hash_elem *b, void *aux UNUSED) {
-  return hash_entry(a, struct frame, elem)->kaddr
-      < hash_entry(b, struct frame, elem)->kaddr;
+  return hash_entry(a, struct frame, elem)->vaddr
+      < hash_entry(b, struct frame, elem)->vaddr;
 }
 
 /* Initialise a frame entry with flag and vaddr and insert into frame_table. 
@@ -46,13 +46,13 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   struct frame *frame = frame_lookup(vaddr);
   // If vaddr already associated with frame, return that frame
   if (frame != NULL) { 
-    return frame; 
+    goto ret; 
   } 
 
   frame = (struct frame *) malloc(sizeof(struct frame));
   // If malloc failed, return NULL
   if (frame == NULL) {
-    return frame; 
+    goto ret;
   }
 
   void *kaddr = palloc_get_page(PAL_USER | flag);  
@@ -72,8 +72,9 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
     frame = hash_entry(conflict, struct frame, elem);
   }
 
-  lock_release(&frame_lock);    
-  return frame;
+  ret: 
+    lock_release(&frame_lock);    
+    return frame;
 }
 
 struct frame *frame_lookup(void *vaddr) {
