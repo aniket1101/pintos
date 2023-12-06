@@ -41,6 +41,8 @@ static bool frame_less(const struct hash_elem *a,
    PAL_USER will be used as a flag whether passed as argument or not. */
 struct frame *frame_init(enum palloc_flags flag, void *vaddr) {
   ASSERT(is_user_vaddr(vaddr));
+  lock_acquire(&frame_lock);      
+
   struct frame *frame = frame_lookup(vaddr);
   if (frame != NULL) { 
     return frame; // If vaddr already associated with frame, return that frame
@@ -51,22 +53,20 @@ struct frame *frame_init(enum palloc_flags flag, void *vaddr) {
     return frame; // If malloc failed, return NULL
   }
 
-  void *paddr = palloc_get_page(flag);  
-  
-  lock_acquire(&frame_lock);      
+  void *paddr = palloc_get_page(PAL_USER | flag);  
   if (paddr == NULL) { // If no pages left
-    // evict_frame(); // Evict a frame
-    paddr = palloc_get_page(flag); // Get a new page, asserting that there is a free page
-    ASSERT(paddr != NULL);
+    evict_frame(); // Evict a frame
+    paddr = palloc_get_page(PAL_USER | PAL_ASSERT | flag); // Get a new page, asserting that there is a free page
   }
 
   frame->t = thread_current();
   frame->vaddr = vaddr;
   frame->paddr = paddr;
 
-  if (hash_insert(&frame_table, &frame->elem) != NULL) {
-    frame = NULL; // Return NULL if hash_insert fails
-  }
+  hash_insert(&frame_table, &frame->elem);
+  // if (hash_insert(&frame_table, &frame->elem) != NULL) {
+  //   frame = NULL; // Return NULL if hash_insert fails
+  // }
 
   lock_release(&frame_lock);    
   return frame;
