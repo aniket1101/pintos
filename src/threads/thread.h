@@ -119,8 +119,7 @@ struct thread
 
 #ifdef VM
     struct hash supp_page_table;     /* Hash table of a thread's pages */
-    struct hash mmap_link_addr_table;
-    struct hash mmap_file_page_table;
+    struct hash mmap_table;
     int map_id;                   /* Next mapid to be assigned */
 #endif
 

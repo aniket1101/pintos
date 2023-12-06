@@ -16,6 +16,14 @@ bool supp_page_table_init(struct hash *hash_table) {
                                  &supp_page_table_less, NULL);
 }
 
+// void add_to_spt(enum page_status status, void *addr, struct file *file,
+//                     off_t offset, bool is_writable) {
+
+// //   insert_supp_page_table(addr + offset, status);
+// //  insert_supp_page_table(addr + offset, status, thread_current()->map_id);
+// //   thread_current()->map_id++;
+// }
+
 void supp_page_table_destroy(struct hash *hash_table) {
     ASSERT(hash_table != NULL);
     hash_apply(hash_table, &free_page_table);
@@ -44,14 +52,12 @@ struct supp_page *get_supp_page_table(struct hash *hash_table, void *vaddr) {
     return entry == NULL ? NULL : hash_entry(entry, struct supp_page, elem);
 }
 
-void insert_supp_page_table(struct hash *hash_table, void *vaddr,
-                            enum page_status status) {
-    ASSERT(hash_table != NULL);
+void insert_supp_page_table(void *vaddr, enum page_status status) {
     struct supp_page *el = (struct supp_page *) malloc(sizeof(struct supp_page));
     ASSERT(el != NULL);
     el->vaddr = pg_round_down(vaddr);
     el->status = status;
-    struct hash_elem *entry = hash_insert(hash_table, &(el->elem));
+    struct hash_elem *entry = hash_insert(&(thread_current()->supp_page_table), &(el->elem));
     if (entry != NULL) {
         hash_entry(entry, struct supp_page, elem)->status = status;
     }

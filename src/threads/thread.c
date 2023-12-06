@@ -315,8 +315,7 @@ thread_create (const char *name, int priority,
   #ifdef VM
     if (t->tid > 1) {
       supp_page_table_init(&t->supp_page_table);
-      mmap_init(&t->mmap_link_addr_table);
-      mmap_fpt_init(&t->mmap_file_page_table);
+      mmap_init(&t->mmap_table);
       t->map_id = 0;
     }
   #endif

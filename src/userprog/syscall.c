@@ -476,7 +476,7 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
   file = file_reopen(file);
   lock_release(&filesys_lock);
 
-  add_to_mmap(MMAPPED, addr, file, 0, PGSIZE, true);
+  // add_to_mmap(MMAPPED, addr, file, 0, PGSIZE, true);
 
   // uint32_t curr_page;
   // for (curr_page = 0; curr_page <= read_bytes; curr_page += PGSIZE) {
@@ -494,35 +494,35 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
 
 static inline void kernel_munmap(mapid_t mapping) {
   struct thread *t = thread_current();
-  struct mmap_link_addr *map_addr = get_mmap(mapping);
+  // struct mmap_link_addr *map_addr = get_mmap(mapping);
 
-  if (map_addr == NULL) {
-    return;
-  }
+  // if (map_addr == NULL) {
+  //   return;
+  // }
 
-  struct file *file = NULL;
-  for (void *curr = map_addr->start_page; curr < map_addr->end_page;
-      curr += PGSIZE) {
-        struct mmap_file_page *mmap_fp = get_mmap_fpt(curr);
-        if (mmap_fp == NULL) {
-          return;
-        }
-        file = mmap_fp->file;
-        void *kaddr = pagedir_get_page(t->pagedir, curr);
-        if (kaddr != NULL) {
-          wipe_frame_memory(kaddr);
-          pagedir_clear_page(t->pagedir, curr);
-        }
+  // struct file *file = NULL;
+  // for (void *curr = map_addr->start_page; curr < map_addr->end_page;
+  //     curr += PGSIZE) {
+  //       struct mmap_file_page *mmap_fp = get_mmap_fpt(curr);
+  //       if (mmap_fp == NULL) {
+  //         return;
+  //       }
+  //       file = mmap_fp->file;
+  //       void *kaddr = pagedir_get_page(t->pagedir, curr);
+  //       if (kaddr != NULL) {
+  //         wipe_frame_memory(kaddr);
+  //         pagedir_clear_page(t->pagedir, curr);
+  //       }
 
-        delete_mmap_fp(mmap_fp);
-        remove_supp_page(&t->supp_page_table, curr);
-  }
+  //       delete_mmap_fp(mmap_fp);
+  //       remove_supp_page(&t->supp_page_table, curr);
+  // }
 
-  delete_mmap(mapping);
+  // delete_mmap(mapping);
       
-  lock_acquire(&filesys_lock);
-  file_close(file);
-  lock_release(&filesys_lock);
+  // lock_acquire(&filesys_lock);
+  // file_close(file);
+  // lock_release(&filesys_lock);
 }
 
 static bool check_mapping(void *start, void *end) {
