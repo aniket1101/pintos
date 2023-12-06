@@ -91,7 +91,7 @@ struct frame *choose_frame(void) {
         if (pagedir_is_accessed(frame->kaddr, frame->uaddr)) {
           if (pagedir_is_dirty(frame->kaddr, frame->uaddr)) {
             // need to check if its in mmap?
-            swap_in(frame->uaddr, sizeof(frame));
+            swap_out(frame->uaddr);
           }
           return frame;
         } else {
