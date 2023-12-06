@@ -68,8 +68,8 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
 
   struct hash_elem *conflict = hash_insert(&frame_table, &frame->elem);
   if (conflict != NULL) { // Return frame with same kaddr
+    free(frame);
     frame = hash_entry(conflict, struct frame, elem);
-    free_frame(frame);
   }
 
   lock_release(&frame_lock);    
