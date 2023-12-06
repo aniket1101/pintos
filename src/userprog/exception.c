@@ -162,6 +162,7 @@ page_fault (struct intr_frame *f)
 	
    /* If user access has faulted, kill user process. */ 
    if (!is_user_vaddr(fault_addr) || fault_addr == NULL || !not_present) {
+      PUTBUF("User access faulted: exit(-1)");
       kernel_exit(-1);
    }
 
@@ -177,10 +178,9 @@ page_fault (struct intr_frame *f)
       uint32_t diff = f->esp - fault_addr;
 		if (PHYS_BASE - vaddr > STACK_LIMIT
             || (diff > 0 && diff != PUSHA_OVERFLOW && diff != PUSH_OVERFLOW)) {
+         PUTBUF_FORMAT("Supp page not found with vaddr = %p. Do not grow stack: exit(-1)", vaddr);
          kernel_exit(-1);
 		}
-	
-		page = supp_page_put(vaddr, ZERO);
    }
 
 	/* Get the kernel address using the frame. */
@@ -189,30 +189,31 @@ page_fault (struct intr_frame *f)
    void *kaddr = frame->kaddr;
 
 	bool writable = true;
+   if (page != NULL) {
+      /* Depending on page status... */
+      switch(page->status) {                                                          
+         case SWAPPED:
+            // Handle swap by lazy loading
+            swap_in(vaddr, (size_t) kaddr);
+            page->status = LOADED;
+            break;
+         case ZERO:
+         /* Page from from is also zeroed out */
+            page->status = LOADED;
+            break;
+         case MMAPPED:
+            page->status = MMAPPED;
+            break;
+         case LOADED:
+            PUTBUF("There should not be a fault from a page in memory!!"); 
+            break;
+         default:
+            PUTBUF("Unrecognised page status!!");
+            NOT_REACHED();
+      }
+   }
 
-	/* Depending on page status... */
-	switch(page->status) {                                                          
-		case SWAPPED:
-			// Handle swap by lazy loading
-			swap_in(vaddr, (size_t) kaddr);
-			page->status = LOADED;
-			break;
-		case ZERO:
-		/* Page from from is also zeroed out */
-			page->status = LOADED;
-			break;
-		case MMAPPED:
-			page->status = MMAPPED;
-			break;
-		case LOADED:
-			PUTBUF("There should not be a fault from a page in memory!!"); 
-			break;
-		default:
-			PUTBUF("Unrecognised page status!!");
-			NOT_REACHED();
-	}
-
-	install_page(vaddr, kaddr, writable);
+   install_page(vaddr, kaddr, writable);
 
    /* To implement virtual memory, delete the rest of the function
       body, and replace it with code that brings in the page to
