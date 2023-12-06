@@ -66,10 +66,11 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   frame->vaddr = vaddr;
   frame->kaddr = kaddr;
 
-  hash_insert(&frame_table, &frame->elem);
-  // if (hash_insert(&frame_table, &frame->elem) != NULL) {
-  //   frame = NULL; // Return NULL if hash_insert fails
-  // }
+  struct hash_elem *conflict = hash_insert(&frame_table, &frame->elem);
+  if (conflict != NULL) { // Return frame with same kaddr
+    frame = hash_entry(conflict, struct frame, elem);
+    free_frame(frame);
+  }
 
   lock_release(&frame_lock);    
   return frame;
@@ -143,9 +144,9 @@ void free_frame(struct frame *frame) {
 }
 
 /* Free function for frame_table_destroy(). */
-static void frame_free_action(struct hash_elem *elem, void *aux UNUSED) {
+static void frame_free_action(struct hash_elem *h_elem, void *aux UNUSED) {
   lock_acquire(&frame_lock);
-  free(hash_entry(elem, struct frame, elem));
+  free(hash_entry(h_elem, struct frame, elem));
   lock_release(&frame_lock);
 }
 
