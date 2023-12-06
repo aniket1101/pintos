@@ -9,11 +9,15 @@
 #include "userprog/pagedir.h"
 #include "userprog/debug.h"
 #include "devices/swap.h"
+#include "filesys/file.h"
 
 static hash_hash_func frame_hash;
 static hash_less_func frame_less;
+static hash_hash_func file_hash_hash;
+static hash_less_func file_less;
 
 static struct hash frame_table;
+static struct hash shared_files;
 static struct lock frame_lock;
 static int clock_hand;
 
@@ -23,6 +27,7 @@ void frame_table_init(void) {
   hash_init(&frame_table, &frame_hash, &frame_less, NULL);
   lock_init(&frame_lock);
   clock_hand = 0;
+  hash_init(&shared_files, &file_hash_hash, &file_less, NULL);
 }
 
 static unsigned frame_hash(const struct hash_elem *e, void *aux UNUSED) {
@@ -34,6 +39,16 @@ static bool frame_less(const struct hash_elem *a,
     const struct hash_elem *b, void *aux UNUSED) {
   return hash_entry(a, struct frame, elem)->kaddr
       < hash_entry(b, struct frame, elem)->kaddr;
+}
+
+static unsigned file_hash_hash(const struct hash_elem *e, void *aux UNUSED) {
+  struct shared_file *shared_file = hash_entry(e, struct shared_file, elem);
+  return (file_hash(shared_file->file) * shared_file->offset);
+}
+
+static bool file_less(const struct hash_elem *a, 
+    const struct hash_elem *b, void *aux) {
+  return file_hash_hash(a, aux) < file_hash_hash(b, aux);
 }
 
 /* Initialise a frame entry with flag and vaddr and insert into frame_table. 

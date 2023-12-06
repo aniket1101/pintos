@@ -13,6 +13,13 @@ struct frame {
     struct hash_elem elem;
 };
 
+struct shared_file {
+    struct frame *frame;
+    struct file *file;
+    int offset;
+    struct hash_elem elem;
+};
+
 void frame_table_init(void);
 
 struct frame *frame_put(void *vaddr, enum palloc_flags flag);
