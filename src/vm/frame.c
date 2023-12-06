@@ -119,33 +119,33 @@ static struct frame *choose_frame(void) {
   hash_first (&i, &frame_table);
   
   //Set current element to clock hand
-  struct frame *f = NULL;
+  struct hash_elem *start_elem = NULL;
   for (int index = 0; index <= clock_hand; index++) {
-    f = hash_entry(hash_next (&i), struct frame, elem);
+    start_elem = hash_next (&i);
   }
-
-  ASSERT (f != NULL)
+  
+  ASSERT(start_elem != NULL);
   while (true) {
-    if (!pagedir_is_accessed(f->t->pagedir, f->vaddr)) {
-      if (pagedir_is_dirty(f->t->pagedir, f->vaddr)) {
-        swap_out(f->vaddr);
+    for (struct hash_elem *h = start_elem; h != NULL; h = hash_next(&i)) {
+      struct frame *f = hash_entry(h, struct frame, elem);
+      if (!pagedir_is_accessed(f->t->pagedir, f->vaddr)) {
+        if (pagedir_is_dirty(f->t->pagedir, f->vaddr)) {
+          swap_out(f->vaddr);
+        }
+
+        clock_hand++;
+        return f;
       }
 
+      pagedir_set_accessed(f->t->pagedir, f->vaddr, false);
+      
       clock_hand++;
-      return f;
+      frame_at_clock = f;
     }
-
-    pagedir_set_accessed(f->t->pagedir, f->vaddr, false);
     
-    clock_hand++;
-    frame_at_clock = f;
-
-    // Sets iterator to next element, checking if its the end of the hash
-    if ((f = hash_entry(hash_next (&i), struct frame, elem)) == NULL) {
-      hash_first (&i, &frame_table);
-      f = hash_entry(hash_next(&i), struct frame, elem);
-      clock_hand = 0;
-    } 
+    hash_first(&i, &frame_table);
+    start_elem = hash_next(&i); 
+    clock_hand = 0;
   }
 }
 
