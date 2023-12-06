@@ -578,9 +578,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
 
       if (page_zero_bytes == PGSIZE) {
-        supp_page_init(upage, ZERO);
+        supp_page_put(upage, ZERO);
       } else {
-        supp_page_init(upage, MMAPPED);
+        supp_page_put(upage, MMAPPED);
         insert_mmap_fpt(&t->mmap_file_page_table, 0, upage, file, ofs, 
                         page_read_bytes, writable);
       }

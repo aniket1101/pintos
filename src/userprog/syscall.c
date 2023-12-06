@@ -483,7 +483,7 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
     
     insert_mmap_fpt(&t->mmap_file_page_table, map_id,
       addr + curr_page, file, curr_page, PGSIZE, true);
-    supp_page_init(addr + curr_page, MMAPPED);
+    supp_page_put(addr + curr_page, MMAPPED);
   }
   add_mmap(&t->mmap_link_addr_table, map_id, addr, curr_page + addr);
   

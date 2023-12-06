@@ -35,7 +35,7 @@ static bool supp_page_less(const struct hash_elem *a,
 
 /* Initialise a supp_page entry with a vaddr and page_status and 
 	 insert to current thread's page table. */
-struct supp_page *supp_page_init(void *vaddr, enum page_status status) {
+struct supp_page *supp_page_put(void *vaddr, enum page_status status) {
 	ASSERT(&thread_current()->supp_page_table != NULL);
 	struct supp_page *supp_page = (struct supp_page *) malloc(sizeof(struct supp_page));
 	if (supp_page == NULL) { // If malloc failed, return NULL

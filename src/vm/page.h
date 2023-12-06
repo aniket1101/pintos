@@ -27,7 +27,7 @@ struct supp_page {
 
 void supp_page_table_system_init(void);
 void supp_page_table_init(struct thread *t);
-struct supp_page *supp_page_init(void *vaddr, enum page_status status);
+struct supp_page *supp_page_put(void *vaddr, enum page_status status);
 struct supp_page *supp_page_lookup(void *vaddr);
 bool supp_page_remove(void *vaddr);
 void supp_page_table_destroy(struct thread *t);
