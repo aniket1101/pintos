@@ -94,9 +94,9 @@ bool supp_page_remove(void *vaddr) {
 static void supp_page_free(struct hash_elem *elem, void *aux UNUSED) {
 	struct supp_page *page = hash_entry(elem, struct supp_page, elem);
 	if (page->status == LOADED) { // If page was loaded, free the frame
-		void *kaddr = pagedir_get_page(thread_current()->pagedir,	page->vaddr);
+		void *kaddr = pagedir_get_page(thread_current()->pagedir, page->vaddr);
 		if (kaddr != NULL) {
-			frame_free(kaddr);	
+			frame_destroy(kaddr);	
 		}
 	}
 

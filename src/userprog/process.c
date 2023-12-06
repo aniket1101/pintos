@@ -274,6 +274,8 @@ process_exit (void)
   pc_link_kill_child(cur); // Set associated pc_link struct's child exit code
   pc_link_free_parents(cur->tid); // Free all pc_link structs cur is parent of
 
+  supp_page_table_destroy(cur);
+
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
