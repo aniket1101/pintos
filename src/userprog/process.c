@@ -577,14 +577,22 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Check if virtual page already allocated */
       struct thread *t = thread_current ();
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
+      enum page_status status;
+       if (page_zero_bytes == PGSIZE) {
+        status = ZERO;
+       } else {
+         status = MMAPPED;
+       }
 
-      if (page_zero_bytes == PGSIZE) {
-        insert_supp_page_table(&t->supp_page_table, upage, ZERO);
-      } else {
-        insert_supp_page_table(&t->supp_page_table, upage, MMAPPED);
-        insert_mmap_fpt(&t->mmap_file_page_table, 0, upage, file, ofs, 
-                        page_read_bytes, writable);
-      }
+      add_to_mmap(status, upage, file, ofs, page_read_bytes, writable);
+
+      // if (page_zero_bytes == PGSIZE) {
+      //   insert_supp_page_table(&t->supp_page_table, upage, ZERO);
+      // } else {
+      //   insert_supp_page_table(&t->supp_page_table, upage, MMAPPED);
+      //   insert_mmap_fpt(&t->mmap_file_page_table, 0, upage, file, ofs, 
+      //                   page_read_bytes, writable);
+      // }
       
       if (kpage == NULL){
         

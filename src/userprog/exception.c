@@ -189,7 +189,7 @@ page_fault (struct intr_frame *f)
             break;
          case MMAPPED:
             struct mmap_file_page *mmap_fp = 
-            get_mmap_fpt(&t->mmap_file_page_table, vaddr);
+            get_mmap_fpt(vaddr);
             writable = page->is_writable;
             lock_filesys_access();
             file_seek(mmap_fp->file, mmap_fp->offset);

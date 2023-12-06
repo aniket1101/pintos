@@ -471,22 +471,22 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
     goto ret;
   }
 
-  struct thread *t = thread_current();
-  map_id = t->next_mapid++;
-
+  map_id = thread_current()->map_id;
   lock_acquire(&filesys_lock);
   file = file_reopen(file);
   lock_release(&filesys_lock);
 
-  uint32_t curr_page;
-  for (curr_page = 0; curr_page <= read_bytes; curr_page += PGSIZE) {
+  add_to_mmap(MMAPPED, addr, file, 0, PGSIZE, true);
+
+  // uint32_t curr_page;
+  // for (curr_page = 0; curr_page <= read_bytes; curr_page += PGSIZE) {
     
-    insert_mmap_fpt(&t->mmap_file_page_table, map_id,
-      addr + curr_page, file, curr_page, PGSIZE, true);
-    insert_supp_page_table(&t->supp_page_table, addr + curr_page,
-                                              MMAPPED);
-  }
-  add_mmap(&t->mmap_link_addr_table, map_id, addr, curr_page + addr);
+  //   insert_mmap_fpt(&t->mmap_file_page_table, map_id,
+  //     addr + curr_page, file, curr_page, PGSIZE, true);
+  //   insert_supp_page_table(&t->supp_page_table, addr + curr_page,
+  //                                             MMAPPED);
+  // }
+  // add_mmap(&t->mmap_link_addr_table, map_id, addr, curr_page + addr);
   
   ret:
     return map_id;
@@ -494,7 +494,7 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
 
 static inline void kernel_munmap(mapid_t mapping) {
   struct thread *t = thread_current();
-  struct mmap_link_addr *map_addr = get_mmap(&t->mmap_link_addr_table, mapping);
+  struct mmap_link_addr *map_addr = get_mmap(mapping);
 
   if (map_addr == NULL) {
     return;
@@ -503,8 +503,7 @@ static inline void kernel_munmap(mapid_t mapping) {
   struct file *file = NULL;
   for (void *curr = map_addr->start_page; curr < map_addr->end_page;
       curr += PGSIZE) {
-        struct mmap_file_page *mmap_fp = get_mmap_fpt(&t->mmap_file_page_table,
-                                                  curr);
+        struct mmap_file_page *mmap_fp = get_mmap_fpt(curr);
         if (mmap_fp == NULL) {
           return;
         }
@@ -515,11 +514,11 @@ static inline void kernel_munmap(mapid_t mapping) {
           pagedir_clear_page(t->pagedir, curr);
         }
 
-        delete_mmap_fp(&t->mmap_file_page_table, mmap_fp);
+        delete_mmap_fp(mmap_fp);
         remove_supp_page(&t->supp_page_table, curr);
   }
 
-  delete_mmap(&t->mmap_link_addr_table, mapping);
+  delete_mmap(mapping);
       
   lock_acquire(&filesys_lock);
   file_close(file);

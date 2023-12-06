@@ -126,8 +126,7 @@ void evict_frame(struct frame *frame) {
   case MMAPPED:
     if(pagedir_is_dirty(t->pagedir, frame->uaddr)) {
       pagedir_clear_page(t->pagedir, frame->uaddr);
-      struct mmap_file_page *mmap_fp = get_mmap_fpt(&t->mmap_file_page_table,
-                                                    frame->uaddr);
+      struct mmap_file_page *mmap_fp = get_mmap_fpt(frame->uaddr);
       lock_filesys_access();
       file_seek(mmap_fp->file, mmap_fp->offset);
       file_read(mmap_fp->file, frame->kaddr, mmap_fp->page_space);
