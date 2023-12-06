@@ -96,7 +96,7 @@ static void supp_page_free(struct hash_elem *elem, void *aux UNUSED) {
 	if (page->status == LOADED) { // If page was loaded, free the frame
 		void *kaddr = pagedir_get_page(thread_current()->pagedir,	page->vaddr);
 		if (kaddr != NULL) {
-			free_frame(kaddr);	
+			frame_free(kaddr);	
 		}
 	}
 

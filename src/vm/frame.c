@@ -91,7 +91,7 @@ struct frame *frame_lookup(void *vaddr) {
 void evict_frame(void) {
   struct frame *to_evict = choose_frame();
   ASSERT (to_evict == NULL); 
-  free_frame(to_evict);
+  frame_free(to_evict);
 }
 
 /* Choose the frame to be evicted according to clock replacement algorithm. */
@@ -132,20 +132,20 @@ static struct frame *choose_frame(void) {
   }
 }
 
-void free_frame(void *kaddr) {
-  bool should_lock = !lock_held_by_current_thread(&frame_lock);
-  if (should_lock) {
-    lock_acquire(&frame_lock);
-  }
-  
-  struct frame *frame = frame_kaddr_lookup(kaddr);
-  if (frame != NULL) {
-    ASSERT(hash_delete(&frame_table, &frame->elem) != NULL);
-    free(frame);
-  }
+void frame_free(struct frame *frame) {
+  ASSERT(frame != NULL);
+  palloc_free_page(frame->kaddr);
+  ASSERT(hash_delete(&frame_table, &frame->elem) != NULL);
+  free(frame);
+}
 
-  palloc_free_page(kaddr);
-  if (should_lock) {
-    lock_release(&frame_lock);
+void frame_destroy(void *kaddr) {
+  lock_acquire(&frame_lock);
+  struct frame *frame = frame_kaddr_lookup(kaddr);
+  if (frame == NULL) {
+    palloc_free_page(kaddr);
+  } else {
+    frame_free(frame);
   }
+  lock_release(&frame_lock);
 } 
