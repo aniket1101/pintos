@@ -118,6 +118,7 @@ void *check_pointer(void *ptr) {
   } 
 
   // If ptr is above (or equal to) PHYS_BASE or is unmapped, exit
+  PUTBUF("Check pointer failed: exit(-1)");
   kernel_exit(-1);
 }
 
@@ -445,10 +446,12 @@ static inline void kernel_close(int fd_num) {
 }
 
 static inline int kernel_mmap(void *addr, struct file_info *info) {
+  PUTBUF("mmap not implemented: exit(-1)");
   kernel_exit(-1);
 }
 
 static inline void kernel_munmap(int mapping) {
+  PUTBUF("munmap not implemented: exit(-1)");
   kernel_exit(-1);
 }
 
