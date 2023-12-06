@@ -12,11 +12,10 @@
 
 static hash_hash_func frame_hash;
 static hash_less_func frame_less;
-static hash_action_func frame_free_action;
 
 static struct hash frame_table;
-static int clock_hand;
 static struct lock frame_lock;
+static int clock_hand;
 
 static struct frame *choose_frame(void);
 
@@ -28,19 +27,20 @@ void frame_table_init(void) {
 
 static unsigned frame_hash(const struct hash_elem *e, void *aux UNUSED) {
   struct frame *frame = hash_entry(e, struct frame, elem);
-  return hash_int((uint32_t) frame->vaddr);
+  return hash_int((uint32_t) frame->kaddr);
 }
 
 static bool frame_less(const struct hash_elem *a, 
     const struct hash_elem *b, void *aux UNUSED) {
-  return hash_entry(a, struct frame, elem)->vaddr
-      < hash_entry(b, struct frame, elem)->vaddr;
+  return hash_entry(a, struct frame, elem)->kaddr
+      < hash_entry(b, struct frame, elem)->kaddr;
 }
 
 /* Initialise a frame entry with flag and vaddr and insert into frame_table. 
    PAL_USER will be used as a flag whether passed as argument or not. */
 struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   ASSERT(is_user_vaddr(vaddr));
+  flag |= PAL_USER;
   lock_acquire(&frame_lock);      
 
   struct frame *frame = frame_lookup(vaddr);
@@ -55,47 +55,42 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
     goto ret;
   }
 
-  void *kaddr = palloc_get_page(PAL_USER | flag);  
+  void *kaddr = palloc_get_page(flag);  
   if (kaddr == NULL) { // If no pages left
     evict_frame(); // Evict a frame
     // Get a new page, asserting that there is now a free page
-    kaddr = palloc_get_page(PAL_USER | PAL_ASSERT | flag); 
+    kaddr = palloc_get_page(PAL_ASSERT | flag); 
   }
 
   frame->t = thread_current();
   frame->vaddr = vaddr;
   frame->kaddr = kaddr;
 
-  struct hash_elem *conflict = hash_insert(&frame_table, &frame->elem);
-  if (conflict != NULL) { // Return frame with same kaddr
-    free(frame);
-    frame = hash_entry(conflict, struct frame, elem);
-  }
+  ASSERT(hash_insert(&frame_table, &frame->elem) == NULL);
 
   ret: 
     lock_release(&frame_lock);    
     return frame;
 }
 
-struct frame *frame_lookup(void *vaddr) {
-    // Find frame with virtual address vaddr
-    struct frame frame = {.vaddr = vaddr}; // Fake element to search for
+struct frame *frame_kaddr_lookup(void *kaddr) {
+    // // Find frame with virtual address vaddr
+    struct frame frame = {.kaddr = kaddr}; // Fake element to search for
     struct hash_elem *found_elem = hash_find (&frame_table, &frame.elem);
 
     // Return frame or NULL if no frame found
     return found_elem == NULL ? NULL : hash_entry(found_elem, struct frame, elem);
 }
 
-void *frame_lookup_kaddr(void *vaddr) {
-  return frame_lookup(vaddr)->kaddr;
+struct frame *frame_lookup(void *vaddr) {
+  // // Find frame with kernel address kaddr
+  void *kaddr = pagedir_get_page(thread_current()->pagedir, vaddr);
+  return kaddr == NULL ? NULL : frame_kaddr_lookup(kaddr);
 }
 
 void evict_frame(void) {
   struct frame *to_evict = choose_frame();
-  if (to_evict == NULL) {
-    kernel_exit(-1);
-  }
-  
+  ASSERT (to_evict == NULL); 
   free_frame(to_evict);
 }
 
@@ -140,18 +135,19 @@ static struct frame *choose_frame(void) {
   }
 }
 
-void free_frame(struct frame *frame) {
-  frame_free_action(&frame->elem, NULL);
-}
+void free_frame(void *kaddr) {
+  bool should_lock = !lock_held_by_current_thread(&frame_lock);
+  if (should_lock) {
+    lock_acquire(&frame_lock);
+  }
+  struct frame *frame = frame_kaddr_lookup(kaddr);
+  if (frame != NULL) {
+    ASSERT(hash_delete(&frame_table, &frame->elem) != NULL);
+    free(frame);
+  }
 
-/* Free function for frame_table_destroy(). */
-static void frame_free_action(struct hash_elem *h_elem, void *aux UNUSED) {
-  lock_acquire(&frame_lock);
-  free(hash_entry(h_elem, struct frame, elem));
-  lock_release(&frame_lock);
-}
-
-/* Destroy frame page table, freeing each frame. */
-void frame_table_destroy(void) {
-	hash_destroy(&frame_table, &frame_free_action);
-}
+  palloc_free_page(kaddr);
+  if (should_lock) {
+    lock_release(&frame_lock);
+  }
+} 

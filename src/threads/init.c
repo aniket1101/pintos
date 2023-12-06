@@ -156,10 +156,6 @@ main (void)
   file_info_hash_destroy();
 #endif
 
-#ifdef VM 
-  frame_table_destroy();
-#endif
-  
   /* Finish up. */
   shutdown ();
   thread_exit ();
