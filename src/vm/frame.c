@@ -51,6 +51,29 @@ static bool file_less(const struct hash_elem *a,
   return file_hash_hash(a, aux) < file_hash_hash(b, aux);
 }
 
+struct frame *frame_put_file(struct file *file, int offset, void *vaddr, enum palloc_flags flag) {
+  struct shared_file s_file;
+  s_file.file = file;
+  s_file.offset = offset;
+  struct hash_elem *elem = hash_find(&shared_files, &(s_file.elem));
+  struct frame *frame;
+  if (elem == NULL) {
+    struct shared_file *shared_file = (struct shared_file *) malloc (sizeof (struct shared_file));
+    frame = frame_put(vaddr, flag);
+    shared_file->frame = frame;
+    shared_file->file = file;
+    shared_file->offset = offset;
+    hash_insert(&shared_files, &(shared_file->elem));
+  } else {
+    frame = hash_entry(elem, struct shared_file, elem)->frame;
+  }
+
+  struct vpage *vpage = (struct vpage *) malloc (sizeof (struct vpage));
+  vpage->vaddr = vaddr;
+  list_push_back(&(frame->vpages), &(vpage->elem));
+  return frame;
+}
+
 /* Initialise a frame entry with flag and vaddr and insert into frame_table. 
    PAL_USER will be used as a flag whether passed as argument or not. */
 struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
@@ -78,7 +101,7 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   }
 
   frame->t = thread_current();
-  frame->vaddr = vaddr;
+  list_init(&(frame->vpages));
   frame->kaddr = kaddr;
 
   ASSERT(hash_insert(&frame_table, &frame->elem) == NULL);
@@ -111,40 +134,41 @@ void evict_frame(void) {
 
 /* Choose the frame to be evicted according to clock replacement algorithm. */
 static struct frame *choose_frame(void) {
-  if (hash_empty(&frame_table)) {
-    return NULL;
-  }
+//   if (hash_empty(&frame_table)) {
+//     return NULL;
+//   }
 
-  struct hash_iterator i;  
-  hash_first (&i, &frame_table);
+//   struct hash_iterator i;  
+//   hash_first (&i, &frame_table);
 
-  // Set current element to clock hand
-  for (int index = 0; index < clock_hand; index++) {
-    hash_next (&i);
-  }
+//   // Set current element to clock hand
+//   for (int index = 0; index < clock_hand; index++) {
+//     hash_next (&i);
+//   }
 
-  while (true) {
-    struct frame *frame = hash_entry(hash_cur(&i), struct frame, elem);
-    // havent checked for aliases?
-    if (!pagedir_is_accessed(frame->t->pagedir, frame->vaddr)) {
-      if (pagedir_is_dirty(frame->t->pagedir, frame->vaddr)) {
-        // need to check if its in mmap?
-        swap_in(frame->vaddr, sizeof(frame));
-      }
+//   while (true) {
+//     struct frame *frame = hash_entry(hash_cur(&i), struct frame, elem);
+//     // havent checked for aliases?
+//     if (!pagedir_is_accessed(frame->t->pagedir, frame->vaddr)) {
+//       if (pagedir_is_dirty(frame->t->pagedir, frame->vaddr)) {
+//         // need to check if its in mmap?
+//         swap_in(frame->vaddr, sizeof(frame));
+//       }
     
-      return frame;
-    }
+//       return frame;
+//     }
     
-    pagedir_set_accessed(frame->t->pagedir, frame->vaddr, false);
+//     pagedir_set_accessed(frame->t->pagedir, frame->vaddr, false);
 
-    clock_hand++;
+//     clock_hand++;
     
-    // Sets iterator to next element, checking if its the end of the hash
-    if (hash_next (&i)) {
-      hash_first (&i, &frame_table);
-      clock_hand = 0;
-    } 
-  }
+//     // Sets iterator to next element, checking if its the end of the hash
+//     if (hash_next (&i)) {
+//       hash_first (&i, &frame_table);
+//       clock_hand = 0;
+//     } 
+//   }
+  return NULL;
 }
 
 void frame_free(struct frame *frame) {
