@@ -14,20 +14,21 @@ bool mmap_init(struct hash *mmap_table) {
                                  &mmap_entry_less, NULL);
 }
 
-bool add_mmap_entry(void *start_page) {
-  struct mmap_entry *map_link 
+bool add_mmap_entry(void *start_page, int page_cnt) {
+  struct mmap_entry *map_entry
     = (struct mmap_entry*) malloc(sizeof(struct mmap_entry));
     
-  if (map_link == NULL) {
+  if (map_entry == NULL) {
       return false;
   }
-  map_link->map_id = thread_current()->map_id;
-  map_link->start_page = start_page;
-  // map_link->end_page = end_page;
+  map_entry->map_id = thread_current()->map_id;
+  map_entry->start_page = start_page;
+  map_entry->page_count = page_cnt;
 
-  struct hash_elem *elem = hash_insert(&(thread_current()->mmap_table), &map_link->elem);
+  struct hash_elem *elem = hash_insert(&(thread_current()->mmap_table), &map_entry->elem);
+  thread_current()->map_id++;
 
-  return elem != NULL;
+  return elem == NULL;
 }
 
 struct mmap_entry *get_mmap_entry(mapid_t map_id) {

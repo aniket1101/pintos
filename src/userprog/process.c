@@ -584,15 +584,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
          status = MMAPPED;
        }
 
-      // add_to_mmap(status, upage, file, ofs, page_read_bytes, writable);
-
-      // if (page_zero_bytes == PGSIZE) {
-      //   insert_supp_page_table(&t->supp_page_table, upage, ZERO);
-      // } else {
-      //   insert_supp_page_table(&t->supp_page_table, upage, MMAPPED);
-      //   insert_mmap_fpt(&t->mmap_file_page_table, 0, upage, file, ofs, 
-      //                   page_read_bytes, writable);
-      // }
+      add_to_spt(status, upage, file, ofs, writable);
       
       if (kpage == NULL){
         
