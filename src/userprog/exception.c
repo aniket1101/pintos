@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <debug.h>
 #include "filesys/file.h"
+#include "filesys/file.h"
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
 #include "userprog/process.h"
@@ -136,7 +137,7 @@ page_fault (struct intr_frame *f)
    bool write UNUSED; /* True: access was write, false: access was read. */
    bool user UNUSED;  /* True: access by user, false: access by kernel. */
    void *fault_addr;  /* Fault address. */
-   struct thread *t = thread_current(); /* The current thread. */
+   struct thread *t UNUSED = thread_current(); /* The current thread. */
 
    /* Obtain faulting address, the virtual address that was
       accessed to cause the fault.  It may point to code or to
@@ -168,7 +169,7 @@ page_fault (struct intr_frame *f)
    void* vaddr = pg_round_down(fault_addr);
 
    /* Get the relevant page from this thread's page table. */
-   struct supp_page *page = get_supp_page_table(&t->supp_page_table, vaddr);
+   struct supp_page *page = supp_page_lookup(vaddr);
 
    /* If the page does not exists then kill the process*/
    if (page == NULL) {
@@ -179,11 +180,14 @@ page_fault (struct intr_frame *f)
          kernel_exit(-1);
 		}
 	
-		page = insert_supp_page_table(&t->supp_page_table, vaddr, ZERO);
+		page = supp_page_put(vaddr, ZERO);
    }
 
 	/* Get the kernel address using the frame. */
-	void *kaddr = put_frame(PAL_USER, vaddr);
+   struct frame *frame = frame_put(vaddr, PAL_USER);
+   ASSERT(frame != NULL);
+   void *kaddr = frame->kaddr;
+
 	bool writable = true;
 
 	/* Depending on page status... */

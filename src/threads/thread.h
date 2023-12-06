@@ -115,7 +115,13 @@ struct thread
     int exit_code;                   /* Exit code. */
     struct hash fds;                 /* Hash table of thread's fds. */
     struct file *file;               /* Pointer to executable file. */
-    struct hash supp_page_table;     /* Hash table of a thread's pages*/
+#endif
+
+#ifdef VM
+    struct hash supp_page_table;     /* Hash table of a thread's pages */
+    struct hash mmap_link_addr_table;
+    struct hash mmap_file_page_table;
+    int next_mapid;                   /* Next mapid to be assigned */
 #endif
 
     /* Owned by thread.c. */

@@ -1,3 +1,5 @@
+#include "userprog/process.h"
+#include <hash.h>
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -5,7 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <user/syscall.h>
-#include "userprog/process.h"
 #include "userprog/syscall.h"
 #include "userprog/fd.h"
 #include "userprog/pc_link.h"
@@ -25,10 +26,8 @@
 #include "debug.h"
 #include "threads/malloc.h"
 #include "filesys/file.h"
-#include <hash.h>
 #include "vm/frame.h"
 #include "vm/page.h"
-
 
 #define PUSH_ESP(val, type) \
   if_->esp -= sizeof(type); \
@@ -263,7 +262,7 @@ process_exit (void)
   struct thread *cur = thread_current ();
 
   fd_hash_destroy(); // Destroy this thread's hash table of fds
-
+  
   lock_filesys_access();
   // Allow this executable to be written to
   if (cur->file != NULL) {
@@ -578,36 +577,32 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
 
       if (page_zero_bytes == PGSIZE) {
-        insert_supp_page_table(&t->supp_page_table, upage, ZERO);
+        supp_page_put(upage, ZERO);
       } else {
-        insert_supp_page_table(&t->supp_page_table, upage, MMAPPED);
-        // Insert memory mapped file later
+        supp_page_put(upage, MMAPPED);
       }
       
-      if (kpage == NULL){
-        
+      if (kpage == NULL) {
         /* Get a new page of memory. */
-        kpage = put_frame (PAL_USER, upage);
-        if (kpage == NULL){
+        struct frame *new_frame = frame_put (upage, PAL_USER);
+        if (new_frame == NULL) {
           return false;
         }
+        kpage = new_frame->kaddr; 
         
         /* Add the page to the process's address space. */
-        if (!install_page (upage, kpage, writable)) 
-        {
-          free_frame (kpage);
+        if (!install_page (upage, kpage, writable)) {
+          free_frame (new_frame);
           return false; 
-        }     
-        
+        }
+
       } else {
-        
-        /* Check if writable flag for the page should be updated */
-        if(writable && !pagedir_is_writable(t->pagedir, upage)){
+      
+        if (writable && !pagedir_is_writable(t->pagedir, upage)) {
+          /* Check if writable flag for the page should be updated */
           pagedir_set_writable(t->pagedir, upage, writable); 
         }
-        
       }
-
       /* Load data into the page. */
       if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes){
         return false; 
@@ -627,20 +622,18 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
-  uint8_t *kpage;
   bool success = false;
 
   // Need to take into account the zeroed
-  kpage = (uint8_t *) put_frame(PAL_USER | PAL_ZERO, PHYS_BASE - PGSIZE);
-  if (kpage != NULL) 
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success) {
-        *esp = PHYS_BASE;
-      } else {  
-        free_frame (kpage);
-      }
+  struct frame *frame = frame_put(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
+  if (frame != NULL) {
+    success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, frame->kaddr, true);
+    if (success) {
+      *esp = PHYS_BASE;
+    } else {  
+      free_frame (frame);
     }
+  }
   return success;
 }
 

@@ -65,7 +65,7 @@ userprog_SRC += userprog/fd.c       # Fd handling
 userprog_SRC += userprog/file_info.c   # File info 
 
 # Virtual memory code.
-vm_SRC += devices/swap.c		# Swap block manager.
+vm_SRC += devices/swap.c	# Swap block manager.
 vm_SRC += vm/frame.c		# Frame table	
 vm_SRC += vm/page.c			# Supplementary page table.
 #vm_SRC = vm/file.c			# Some other file.

@@ -445,11 +445,11 @@ static inline void kernel_close(int fd_num) {
 }
 
 static inline int kernel_mmap(void *addr, struct file_info *info) {
-
+  kernel_exit(-1);
 }
 
 static inline void kernel_munmap(int mapping) {
-  
+  kernel_exit(-1);
 }
 
 /* Acquires filesys lock. */

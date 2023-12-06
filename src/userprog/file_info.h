@@ -10,13 +10,13 @@
 
 /* Struct to hold information about a created file. */
 struct file_info {
-  char *name; 									/* String confined to 14 chars. */
-	struct file *file;				  	/* File pointer. NULL until open() called. */	
+  char *name; 			 /* String confined to 14 chars. */
+  struct file *file;	 /* File pointer. NULL until open() called. */	
 
-  int num_fds;			            /* Number of fds pointing to this file. */
-	bool should_remove; /* Was remove() called on fd pointing to this file? */
+  int num_fds;			 /* Number of fds pointing to this file. */
+  bool should_remove;    /* Was remove() called on fd pointing to this file? */
 
-	struct hash_elem elem; 			  /* Allows for hash of file_infos. */
+  struct hash_elem elem; /* Allows for hash of file_infos. */
 };
 
 void file_info_system_init(void);

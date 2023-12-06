@@ -14,12 +14,12 @@
 #include "threads/vaddr.h"
 #include "devices/timer.h"
 #ifdef USERPROG
-#include "userprog/process.h"
-#include "userprog/fd.h"
-#include "userprog/debug.h"
+  #include "userprog/process.h"
+  #include "userprog/fd.h"
+  #include "userprog/debug.h"
 #endif
 #ifdef VM
-#include "vm/page.h"
+  #include "vm/page.h"
 #endif
 
 
@@ -277,6 +277,7 @@ thread_create (const char *name, int priority,
     recalculate_thread_priority(t, NULL);
     priority = t->base_priority; 
   } 
+
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
@@ -304,11 +305,17 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-    fd_hash_init(t);
-    if (t->tid > 1) {
-      supp_page_table_init(&(t->supp_page_table));
-    }
-    // t->is_writable = true;
+
+#ifdef USERPROG
+  fd_hash_init(t);
+#endif
+
+#ifdef VM
+  if (t->tid > 1) {
+    supp_page_table_init(t);
+  }
+#endif
+
   try_yield();  
   
   return tid;

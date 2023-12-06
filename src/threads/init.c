@@ -36,6 +36,7 @@
 #ifdef VM
 #include "devices/swap.h"
 #include "vm/frame.h"
+#include "vm/page.h"
 #endif
 #ifdef FILESYS
 #include "devices/block.h"
@@ -129,10 +130,6 @@ main (void)
   serial_init_queue ();
   timer_calibrate ();
 
-#ifdef VM
-  frame_init();
-#endif
-
 #ifdef FILESYS
   /* Initialize file system. */
   ide_init ();
@@ -143,8 +140,10 @@ main (void)
 #ifdef VM
   /* Initialise the swap disk */  
   swap_init ();
+  /* Initialise the supplemental page table */
+  supp_page_table_system_init();
   /* Initialise frame table */
-  frame_init();
+  frame_table_init();
 #endif
 
   printf ("Boot complete.\n");
@@ -156,7 +155,7 @@ main (void)
   pc_link_hash_destroy();
   file_info_hash_destroy();
 #endif
-  
+
   /* Finish up. */
   shutdown ();
   thread_exit ();

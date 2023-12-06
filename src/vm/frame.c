@@ -10,167 +10,142 @@
 #include "userprog/debug.h"
 #include "devices/swap.h"
 
-
-static hash_hash_func frame_table_hash;
-static hash_less_func frame_table_less;
+static hash_hash_func frame_hash;
+static hash_less_func frame_less;
 
 static struct hash frame_table;
-static int clock_hand;
 static struct lock frame_lock;
+static int clock_hand;
 
-static void lock_frame_access(void);
-static void unlock_frame_access(void);
+static struct frame *choose_frame(void);
 
-void frame_init(void) {
-    hash_init(&frame_table, &frame_table_hash, &frame_table_less, NULL);
-    clock_hand = 0;
-    lock_init(&frame_lock);
+void frame_table_init(void) {
+  hash_init(&frame_table, &frame_hash, &frame_less, NULL);
+  lock_init(&frame_lock);
+  clock_hand = 0;
 }
 
-void *get_frame(void *upage) {
-    ASSERT(is_user_vaddr(upage));
-
-    // Find frame with virtual address upage
-    struct frame frame = {.uaddr = upage}; // Fake element to search for
-    struct hash_elem *found_elem = hash_find (&frame_table, &(frame.elem));
-
-    // If it's not in any frame, cause a page fault
-    if (found_elem == NULL) { 
-        return NULL;
-    }
-
-    // Otherwise we can just return the physical address
-    return hash_entry(found_elem, struct frame, elem);
+static unsigned frame_hash(const struct hash_elem *e, void *aux UNUSED) {
+  struct frame *frame = hash_entry(e, struct frame, elem);
+  return hash_int((uint32_t) frame->kaddr);
 }
 
-void *put_frame(enum palloc_flags flag, void *upage) {
-    ASSERT(is_user_vaddr(upage));
-    void *kpage = get_frame(upage);
-    
-    if (kpage != NULL) {
-      return kpage;
-    }
-
-    kpage = palloc_get_page(flag);  
-    lock_frame_access();
-    if (kpage == NULL) {
-        // evict a frame
-        evict_frame(choose_frame());
-        kpage = palloc_get_page(flag);
-        ASSERT(kpage != NULL);
-    }
-
-    struct frame *next_frame = (struct frame *) malloc(sizeof(struct frame));
-
-    next_frame->t = thread_current();
-    next_frame->kaddr = kpage;
-    next_frame->uaddr = upage;
-
-    hash_insert(&frame_table, &(next_frame->elem));
-    unlock_frame_access();    
-    
-    return kpage;
+static bool frame_less(const struct hash_elem *a, 
+    const struct hash_elem *b, void *aux UNUSED) {
+  return hash_entry(a, struct frame, elem)->kaddr
+      < hash_entry(b, struct frame, elem)->kaddr;
 }
 
-struct frame *choose_frame(void) {
-    if (!hash_empty(&frame_table)) {
-      struct hash_iterator i;  
-      hash_first (&i, &frame_table);
+/* Initialise a frame entry with flag and vaddr and insert into frame_table. 
+   PAL_USER will be used as a flag whether passed as argument or not. */
+struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
+  ASSERT(is_user_vaddr(vaddr));
+  flag |= PAL_USER;
+  lock_acquire(&frame_lock);      
 
-      // Set current element to clock hand
-      for (int index = 0; index < clock_hand; index++) {
-        hash_next (&i);
-      }
+  struct frame *frame = frame_lookup(vaddr);
+  // If vaddr already associated with frame, return that frame
+  if (frame != NULL) { 
+    goto ret; 
+  } 
 
-      while (true) {
-        struct frame *frame = hash_entry(hash_cur(&i), struct frame, elem);
-        // havent checked for aliases?
-        if (!pagedir_is_accessed(frame->kaddr, frame->uaddr)) {
-          if (pagedir_is_dirty(frame->kaddr, frame->uaddr)) {
-            // need to check if its in mmap?
-            swap_in(frame->uaddr, sizeof(frame));
-          }
-          return frame;
-        } else {
-          pagedir_set_accessed(frame->kaddr, frame->uaddr, false);
-        }
+  frame = (struct frame *) malloc(sizeof(struct frame));
+  // If malloc failed, return NULL
+  if (frame == NULL) {
+    goto ret;
+  }
 
-        // Sets iterator to next element, checking if its the end of the hash
-        if (hash_next (&i)) {
-          hash_first (&i, &frame_table);
-          clock_hand = -1;
-        }
+  void *kaddr = palloc_get_page(flag);  
+  if (kaddr == NULL) { // If no pages left
+    evict_frame(); // Evict a frame
+    // Get a new page, asserting that there is now a free page
+    kaddr = palloc_get_page(PAL_ASSERT | flag); 
+  }
 
-        clock_hand++;
-      }
-    }
+  frame->t = thread_current();
+  frame->vaddr = vaddr;
+  frame->kaddr = kaddr;
+
+  ASSERT(hash_insert(&frame_table, &frame->elem) == NULL);
+
+  ret: 
+    lock_release(&frame_lock);    
+    return frame;
+}
+
+struct frame *frame_kaddr_lookup(void *kaddr) {
+    // // Find frame with virtual address vaddr
+    struct frame frame = {.kaddr = kaddr}; // Fake element to search for
+    struct hash_elem *found_elem = hash_find (&frame_table, &frame.elem);
+
+    // Return frame or NULL if no frame found
+    return found_elem == NULL ? NULL : hash_entry(found_elem, struct frame, elem);
+}
+
+struct frame *frame_lookup(void *vaddr) {
+  // // Find frame with kernel address kaddr
+  void *kaddr = pagedir_get_page(thread_current()->pagedir, vaddr);
+  return kaddr == NULL ? NULL : frame_kaddr_lookup(kaddr);
+}
+
+void evict_frame(void) {
+  struct frame *to_evict = choose_frame();
+  ASSERT (to_evict == NULL); 
+  free_frame(to_evict);
+}
+
+/* Choose the frame to be evicted according to clock replacement algorithm. */
+static struct frame *choose_frame(void) {
+  if (hash_empty(&frame_table)) {
     return NULL;
-}
+  }
 
-void evict_frame(struct frame *frame) {
-    if (frame != NULL) {
-      free_frame(frame->kaddr);
-    }
-    kernel_exit(-1);
-}
+  struct hash_iterator i;  
+  hash_first (&i, &frame_table);
 
-bool wipe_frame_memory(void *kaddr) {
-    ASSERT(is_kernel_vaddr(kaddr));
-    struct frame frame;
-    frame.kaddr = kaddr;
-    struct hash_elem *elem = hash_find(&frame_table, &frame.elem);
+  // Set current element to clock hand
+  for (int index = 0; index < clock_hand; index++) {
+    hash_next (&i);
+  }
+
+  while (true) {
+    struct frame *frame = hash_entry(hash_cur(&i), struct frame, elem);
+    // havent checked for aliases?
+    if (!pagedir_is_accessed(frame->t->pagedir, frame->vaddr)) {
+      if (pagedir_is_dirty(frame->t->pagedir, frame->vaddr)) {
+        // need to check if its in mmap?
+        swap_in(frame->vaddr, sizeof(frame));
+      }
     
-    if (elem == NULL) {
-        return false;
+      return frame;
     }
+    
+    pagedir_set_accessed(frame->t->pagedir, frame->vaddr, false);
 
-    struct frame *entry = hash_entry(elem, struct frame, elem);
-    evict_frame(entry);
-    return true;
-
+    clock_hand++;
+    
+    // Sets iterator to next element, checking if its the end of the hash
+    if (hash_next (&i)) {
+      hash_first (&i, &frame_table);
+      clock_hand = 0;
+    } 
+  }
 }
 
 void free_frame(void *kaddr) {
-    struct frame frame;
-    frame.kaddr = kaddr;
-
-    bool frame_locked = lock_held_by_current_thread(&frame_lock);
-
-    if (!frame_locked) {
-        lock_frame_access();
-    }
-
-    struct hash_elem *elem = hash_delete(&frame_table, &frame.elem);
-    ASSERT(elem != NULL);
-    struct frame *freed_frame = hash_entry(elem, struct frame, elem);
-
-    // Frees the page and removes its reference
-    pagedir_clear_page(freed_frame->t->pagedir, freed_frame->uaddr);
-
-    palloc_free_page(freed_frame->kaddr);
-    free(freed_frame);
-
-    if (!frame_locked) {
-        unlock_frame_access();
-    }
-}
-
-static void lock_frame_access() {
+  bool should_lock = !lock_held_by_current_thread(&frame_lock);
+  if (should_lock) {
     lock_acquire(&frame_lock);
-}
+  }
+  
+  struct frame *frame = frame_kaddr_lookup(kaddr);
+  if (frame != NULL) {
+    ASSERT(hash_delete(&frame_table, &frame->elem) != NULL);
+    free(frame);
+  }
 
-static void unlock_frame_access() {
+  palloc_free_page(kaddr);
+  if (should_lock) {
     lock_release(&frame_lock);
-}
-
-static unsigned frame_table_hash(const struct hash_elem *e, void *aux UNUSED) {
-  struct frame *frame = hash_entry(e, struct frame, elem);
-  return hash_int((uint32_t) frame->kaddr);
-  return hash_int((uint32_t) frame->kaddr);
-}
-
-static bool frame_table_less(const struct hash_elem *a, 
-    const struct hash_elem *b, void *aux UNUSED) {
-    return hash_entry(a, struct frame, elem)->kaddr
-    < hash_entry(b, struct frame, elem)->kaddr;
-}
+  }
+} 
