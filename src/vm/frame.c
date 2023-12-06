@@ -90,7 +90,7 @@ struct frame *frame_lookup(void *vaddr) {
 
 void evict_frame(void) {
   struct frame *to_evict = choose_frame();
-  ASSERT (to_evict == NULL); 
+  ASSERT (to_evict != NULL); 
   frame_free(to_evict);
 }
 
