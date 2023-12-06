@@ -44,19 +44,22 @@ struct frame *frame_init(enum palloc_flags flag, void *vaddr) {
   lock_acquire(&frame_lock);      
 
   struct frame *frame = frame_lookup(vaddr);
+  // If vaddr already associated with frame, return that frame
   if (frame != NULL) { 
-    return frame; // If vaddr already associated with frame, return that frame
+    return frame; 
   } 
 
   frame = (struct frame *) malloc(sizeof(struct frame));
+  // If malloc failed, return NULL
   if (frame == NULL) {
-    return frame; // If malloc failed, return NULL
+    return frame; 
   }
 
   void *paddr = palloc_get_page(PAL_USER | flag);  
   if (paddr == NULL) { // If no pages left
     evict_frame(); // Evict a frame
-    paddr = palloc_get_page(PAL_USER | PAL_ASSERT | flag); // Get a new page, asserting that there is a free page
+    // Get a new page, asserting that there is now a free page
+    paddr = palloc_get_page(PAL_USER | PAL_ASSERT | flag); 
   }
 
   frame->t = thread_current();
