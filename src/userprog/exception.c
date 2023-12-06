@@ -188,12 +188,11 @@ page_fault (struct intr_frame *f)
             page->status = LOADED;
             break;
          case MMAPPED:
-         // get map_id from page
-            // struct mmap_file_page *mmap_entry = get_mmap_entry(vaddr);
+            struct mmap_entry *mmap_entry = get_mmap_entry(page->map_id);
             writable = page->is_writable;
             lock_filesys_access();
-            // file_seek(mmap_entry->file, mmap_entry->offset);
-            // file_read(mmap_entry->file, kaddr, mmap_entry->page_space);
+            file_seek(page->file, page->file_offset);
+            file_read(page->file, kaddr, mmap_entry->page_count * PGSIZE);
             unlock_filesys_access();
             page->status = MMAPPED;
             break;

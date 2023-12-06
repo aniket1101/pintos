@@ -486,35 +486,39 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
 
 static inline void kernel_munmap(mapid_t mapping) {
   struct thread *t = thread_current();
-  // struct mmap_link_addr *map_addr = get_mmap(mapping);
+  struct mmap_entry *mmap_entry = get_mmap_entry(mapping);
 
-  // if (map_addr == NULL) {
-  //   return;
-  // }
+  void *start = mmap_entry->start_page;
 
-  // struct file *file = NULL;
-  // for (void *curr = map_addr->start_page; curr < map_addr->end_page;
-  //     curr += PGSIZE) {
-  //       struct mmap_file_page *mmap_fp = get_mmap_fpt(curr);
-  //       if (mmap_fp == NULL) {
-  //         return;
-  //       }
-  //       file = mmap_fp->file;
-  //       void *kaddr = pagedir_get_page(t->pagedir, curr);
-  //       if (kaddr != NULL) {
-  //         wipe_frame_memory(kaddr);
-  //         pagedir_clear_page(t->pagedir, curr);
-  //       }
+  if (mmap_entry == NULL) {
+    return;
+  }
 
-  //       delete_mmap_fp(mmap_fp);
-  //       remove_supp_page(&t->supp_page_table, curr);
-  // }
+  struct supp_page *page 
+    = get_supp_page_table(&t->supp_page_table, start);
+  struct file *file = file = page->file;
 
-  // delete_mmap(mapping);
+  if (file == NULL) {
+    return;
+  }
+
+  for (void *curr = start; curr < start + (mmap_entry->page_count * PGSIZE);
+      curr += PGSIZE) {
+
+        void *kaddr = pagedir_get_page(t->pagedir, curr);
+        if (kaddr != NULL) {
+          wipe_frame_memory(kaddr);
+          pagedir_clear_page(t->pagedir, curr);
+        }
+
+        remove_supp_page(&t->supp_page_table, curr);
+  }
+
+  delete_mmap_entry(mapping);
       
-  // lock_acquire(&filesys_lock);
-  // file_close(file);
-  // lock_release(&filesys_lock);
+  lock_acquire(&filesys_lock);
+  file_close(file);
+  lock_release(&filesys_lock);
 }
 
 static bool check_mapping(void *start, void *end) {

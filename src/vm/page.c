@@ -48,6 +48,7 @@ void add_to_spt(enum page_status status, void *vaddr, struct file *file,
                     off_t offset, bool is_writable) {
     struct supp_page *el = (struct supp_page *) malloc(sizeof(struct supp_page));
     ASSERT(el != NULL);
+    el->map_id = thread_current()->map_id;
     el->file = file;
     el->status = status;
     el->file_offset = offset;

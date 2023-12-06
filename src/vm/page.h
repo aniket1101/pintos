@@ -13,6 +13,7 @@ enum page_status {
 };
 
 struct supp_page {
+    int map_id;
     struct file *file;
     off_t file_offset;
     uint32_t read_bytes;        /* A page's read bytes */
