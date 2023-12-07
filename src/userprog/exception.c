@@ -167,7 +167,7 @@ page_fault (struct intr_frame *f)
    }
 
 	/* Round the fault address down to a page boundary. */
-   void* vaddr = pg_round_down(fault_addr);
+   void *vaddr = pg_round_down(fault_addr);
 
    /* Get the relevant page from this thread's page table. */
    struct supp_page *page = supp_page_lookup(vaddr);
@@ -179,6 +179,8 @@ page_fault (struct intr_frame *f)
 		if (PHYS_BASE - vaddr > STACK_LIMIT
             || (diff > 0 && diff != PUSHA_OVERFLOW && diff != PUSH_OVERFLOW)) {
          PUTBUF_FORMAT("Supp page not found with vaddr = %p. Do not grow stack: exit(-1)", vaddr);
+         f->eip = (void (*) (void)) f->eax;
+         f->eax = 0xffffffff;
          kernel_exit(-1);
 		}
    }
