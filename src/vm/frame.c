@@ -30,11 +30,9 @@ void frame_init(void) {
     lock_init(&frame_lock);
 }
 
-void *get_frame(void *upage) {
-    ASSERT(is_user_vaddr(upage));
-
+struct frame *get_frame(void *kpage) {
     // Find frame with virtual address upage
-    struct frame frame = {.uaddr = upage}; // Fake element to search for
+    struct frame frame = {.kaddr = kpage}; // Fake element to search for
     struct hash_elem *found_elem = hash_find (&frame_table, &(frame.elem));
 
     // If it's not in any frame, cause a page fault
@@ -64,12 +62,15 @@ void *put_frame(enum palloc_flags flag, void *upage) {
     }
 
     struct frame *next_frame = (struct frame *) malloc(sizeof(struct frame));
-
+    if (next_frame == NULL) {
+      return NULL;
+    }
     next_frame->t = thread_current();
     next_frame->kaddr = kpage;
     next_frame->uaddr = upage;
-
+    
     hash_insert(&frame_table, &(next_frame->elem));
+
     unlock_frame_access();    
     
     return kpage;
@@ -116,14 +117,7 @@ void evict_frame(struct frame *frame) {
   struct thread *t = frame->t;
   switch (page->status)
   {
-  case LOADED:
-    /* Swap out from physical memory to disk*/
-    pagedir_clear_page(t->pagedir, frame->uaddr);
-    swap_out(frame->uaddr);
-    page->status = SWAPPED;
-    break;
-
-  case MMAPPED:
+  case FILE:
     if(pagedir_is_dirty(t->pagedir, frame->uaddr)) {
       pagedir_clear_page(t->pagedir, frame->uaddr);
       struct mmap_entry *mmap_entry = get_mmap_entry(page->map_id);
@@ -198,7 +192,6 @@ static void unlock_frame_access() {
 
 static unsigned frame_table_hash(const struct hash_elem *e, void *aux UNUSED) {
   struct frame *frame = hash_entry(e, struct frame, elem);
-  return hash_int((uint32_t) frame->kaddr);
   return hash_int((uint32_t) frame->kaddr);
 }
 

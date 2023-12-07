@@ -2,7 +2,7 @@
 #include "threads/palloc.h"
 
 void frame_init(void);
-void *get_frame(void *upage);
+struct frame *get_frame(void *upage);
 void *put_frame(enum palloc_flags flag, void *upage);
 struct frame *choose_frame(void);
 void evict_frame(struct frame *frame);
