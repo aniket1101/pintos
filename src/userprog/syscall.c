@@ -123,6 +123,7 @@ static bool put_user (uint8_t *udst, uint8_t byte)
   return error_code != -1;
 }
 
+/* Validates ptr by exiting if a ptr is a kernel addr or get_user() fails. */
 static uint8_t safe_get(void *ptr) {
   int res;
   if (is_user_vaddr(ptr) && (res = get_user((uint8_t *) ptr)) != -1) {
@@ -132,12 +133,14 @@ static uint8_t safe_get(void *ptr) {
   exit_process(-1);
 }
 
+/* Validates ptr by exiting if a ptr is a kernel addr or put_user() fails. */
 static void safe_put(void *ptr, uint8_t byte) {
   if (!is_user_vaddr(ptr) || !put_user(ptr, byte)) {
     exit_process(-1);
   }
 }
 
+/* Validates a buffer, checking every page. */
 static void *validate_buffer(void *ptr, unsigned size) {
   safe_get(ptr);
 
@@ -150,6 +153,7 @@ static void *validate_buffer(void *ptr, unsigned size) {
   return ptr;
 }
 
+/* Validates a string, checking every character. */
 static char *validate_string(char *ptr) {
   while (safe_get(ptr++) != '\0') { 
     PUTBUF("safe get");
@@ -180,7 +184,6 @@ void exit_process(int status) {
 
   thread_exit();
 }
-
 
 /* Implements the exec system call by:
   - Executing the process called in cmd_line
@@ -358,7 +361,6 @@ static void syscall_read(struct intr_frame *f) {
   f->eax = bytes_read;
 }
 
-/* Wrapper for write() */
 static void syscall_write(struct intr_frame *f) {
   int fd = pop_arg(0, int);
   void *buffer = pop_arg(1, void *);
@@ -450,7 +452,6 @@ static void syscall_close(struct intr_frame *f) {
   }
 }
 
-/* Wrapper for mmap() */
 static void syscall_mmap(struct intr_frame *f) {
   int fd_num = pop_arg(0, int);
   // void *addr = safe_get_buf(safe_get_arg(0, f), );
