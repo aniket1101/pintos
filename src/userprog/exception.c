@@ -2,6 +2,8 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <debug.h>
+#include <string.h>
+#include "filesys/file.h"
 #include "filesys/file.h"
 #include "userprog/gdt.h"
 #include "userprog/syscall.h"
@@ -140,7 +142,7 @@ page_fault (struct intr_frame *f)
    bool write UNUSED;        /* True: access was write, false: access was read. */
    bool user UNUSED;         /* True: access by user, false: access by kernel. */
    void *fault_addr;  /* Fault address. */
-   struct thread *t = thread_current(); /* The current thread. */
+   struct thread *t UNUSED = thread_current(); /* The current thread. */
 
    /* Obtain faulting address, the virtual address that was
       accessed to cause the fault.  It may point to code or to

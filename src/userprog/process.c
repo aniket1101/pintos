@@ -28,7 +28,6 @@
 #include "filesys/file.h"
 #include "vm/frame.h"
 #include "vm/page.h"
-#include "vm/mmap.h"
 
 #define PUSH_ESP(val, type) \
   if_->esp -= sizeof(type); \
@@ -601,7 +600,7 @@ setup_stack (void **esp)
     if (success) {
       *esp = PHYS_BASE;
     } else {  
-      free_frame (frame);
+      frame_free (frame);
     }
   }
   return success;

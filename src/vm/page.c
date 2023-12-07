@@ -104,7 +104,7 @@ bool supp_page_remove(void *vaddr) {
 /* Free function for supp_page_table_destroy(). */
 static void supp_page_free(struct hash_elem *elem, void *aux UNUSED) {
 	struct supp_page *page = hash_entry(elem, struct supp_page, elem);
-	free_frame(frame_kaddr_lookup(page->vaddr));	
+	frame_destroy(page->vaddr);	
 	free(page);
 }
 
