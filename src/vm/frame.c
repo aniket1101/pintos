@@ -15,9 +15,13 @@ static hash_less_func frame_less;
 
 static struct hash frame_table;
 static struct lock frame_lock;
+
 static int clock_hand;
+static struct frame *frame_at_clock;
 
 static struct frame *choose_frame(void);
+static struct frame *choose_frame_lru(void);
+static struct frame *frame_get_at(int index);
 
 void frame_table_init(void) {
   hash_init(&frame_table, &frame_hash, &frame_less, NULL);
@@ -65,6 +69,7 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   frame->t = thread_current();
   frame->vaddr = vaddr;
   frame->kaddr = kaddr;
+  frame->swapped = false;
 
   ASSERT(hash_insert(&frame_table, &frame->elem) == NULL);
 
@@ -88,9 +93,20 @@ struct frame *frame_lookup(void *vaddr) {
   return kaddr == NULL ? NULL : frame_kaddr_lookup(kaddr);
 }
 
+static struct frame *choose_frame_lru(void) {
+  struct hash_iterator i;
+  hash_first(&i, &frame_table);
+  struct frame *f = NULL;
+  while (f == NULL) {
+    f = hash_entry(hash_next(&i), struct frame, elem);
+  }
+
+  return f;
+}
+
 void evict_frame(void) {
   struct frame *to_evict = choose_frame();
-  ASSERT (to_evict == NULL); 
+  ASSERT (to_evict != NULL); 
   frame_free(to_evict);
 }
 
@@ -102,33 +118,36 @@ static struct frame *choose_frame(void) {
 
   struct hash_iterator i;  
   hash_first (&i, &frame_table);
-
-  // Set current element to clock hand
-  for (int index = 0; index < clock_hand; index++) {
-    hash_next (&i);
+  
+  //Set current element to clock hand
+  struct hash_elem *start_elem = NULL;
+  for (int index = 0; index <= clock_hand; index++) {
+    start_elem = hash_next (&i);
   }
-
+  
+  ASSERT(start_elem != NULL);
   while (true) {
-    struct frame *frame = hash_entry(hash_cur(&i), struct frame, elem);
-    // havent checked for aliases?
-    if (!pagedir_is_accessed(frame->t->pagedir, frame->vaddr)) {
-      if (pagedir_is_dirty(frame->t->pagedir, frame->vaddr)) {
-        // need to check if its in mmap?
-        swap_in(frame->vaddr, sizeof(frame));
+    for (struct hash_elem *h = start_elem; h != NULL; h = hash_next(&i)) {
+      struct frame *f = hash_entry(h, struct frame, elem);
+      if (!pagedir_is_accessed(f->t->pagedir, f->vaddr)) {
+        if (pagedir_is_dirty(f->t->pagedir, f->vaddr)) {
+          f->swap_slot = swap_out(f->vaddr);
+          f->swapped = true;
+        }
+
+        clock_hand++;
+        return f;
       }
-    
-      return frame;
+
+      pagedir_set_accessed(f->t->pagedir, f->vaddr, false);
+      
+      clock_hand++;
+      frame_at_clock = f;
     }
     
-    pagedir_set_accessed(frame->t->pagedir, frame->vaddr, false);
-
-    clock_hand++;
-    
-    // Sets iterator to next element, checking if its the end of the hash
-    if (hash_next (&i)) {
-      hash_first (&i, &frame_table);
-      clock_hand = 0;
-    } 
+    hash_first(&i, &frame_table);
+    start_elem = hash_next(&i); 
+    clock_hand = 0;
   }
 }
 
@@ -139,13 +158,35 @@ void frame_free(struct frame *frame) {
   free(frame);
 }
 
+static struct frame *frame_get_at(int index) {
+  struct hash_iterator iter;
+  hash_first(&iter, &frame_table);
+  struct hash_elem *h_elem = NULL;
+  for (int j = 0; j <= index; j++) {
+    h_elem = hash_next(&iter);
+    ASSERT (h_elem != NULL);
+  }
+
+  return hash_entry(h_elem, struct frame, elem);
+}
+
 void frame_destroy(void *kaddr) {
   lock_acquire(&frame_lock);
   struct frame *frame = frame_kaddr_lookup(kaddr);
   if (frame == NULL) {
     palloc_free_page(kaddr);
   } else {
+    if (frame_at_clock != NULL 
+        && !frame_less(&frame_at_clock->elem, &frame->elem, NULL)) {
+      frame_at_clock = frame_get_at(clock_hand--);
+    }
+    
+    if (frame->swapped) {
+      swap_drop(frame->swap_slot);
+    }
+    
     frame_free(frame);
   }
+
   lock_release(&frame_lock);
 } 
