@@ -119,6 +119,8 @@ struct thread
 
 #ifdef VM
     struct hash supp_page_table;     /* Hash table of a thread's pages */
+    struct hash mmap_table;
+    int map_id;                   /* Next mapid to be assigned */
 #endif
 
     /* Owned by thread.c. */

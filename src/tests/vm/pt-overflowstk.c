@@ -54,5 +54,5 @@ void recurse_to_overflow(int count)
   arc4_crypt (&arc4, stk_obj, sizeof stk_obj);
   
   // recurse so that we will eventually overflow the stack
-  recurse_to_overflow(count++);
+  recurse_to_overflow(++count);
 }

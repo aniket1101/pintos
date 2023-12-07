@@ -68,6 +68,7 @@ userprog_SRC += userprog/file_info.c   # File info
 vm_SRC += devices/swap.c	# Swap block manager.
 vm_SRC += vm/frame.c		# Frame table	
 vm_SRC += vm/page.c			# Supplementary page table.
+vm_SRC += vm/mmap.c 		# Memory mapped file structure
 #vm_SRC = vm/file.c			# Some other file.
 
 # Filesystem code.	

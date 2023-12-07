@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include <debug.h>
+#include <string.h>
 #include "filesys/file.h"
 #include "filesys/file.h"
 #include "userprog/gdt.h"
@@ -13,7 +14,11 @@
 #include "threads/vaddr.h"
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/mmap.h"
 #include "devices/swap.h"
+#include "userprog/pagedir.h"
+#include <string.h>
+#include "debug.h"
 
 #define STACK_LIMIT (8 * (1 << 20))
 #define PUSHA_OVERFLOW 32
@@ -134,8 +139,8 @@ static void
 page_fault (struct intr_frame *f) 
 {
    bool not_present;  /* True: not-present page, false: writing r/o page. */
-   bool write UNUSED; /* True: access was write, false: access was read. */
-   bool user UNUSED;  /* True: access by user, false: access by kernel. */
+   bool write UNUSED;        /* True: access was write, false: access was read. */
+   bool user UNUSED;         /* True: access by user, false: access by kernel. */
    void *fault_addr;  /* Fault address. */
    struct thread *t UNUSED = thread_current(); /* The current thread. */
 
@@ -160,7 +165,6 @@ page_fault (struct intr_frame *f)
    write = (f->error_code & PF_W) != 0;
    user = (f->error_code & PF_U) != 0;
 	
-   /* If user access has faulted, kill user process. */ 
    if (!is_user_vaddr(fault_addr) || fault_addr == NULL || !not_present) {
       PUTBUF("User access faulted: exit(-1)");
       exit_process(-1);
@@ -171,59 +175,62 @@ page_fault (struct intr_frame *f)
 
    /* Get the relevant page from this thread's page table. */
    struct supp_page *page = supp_page_lookup(vaddr);
-
+   
    /* If the page does not exists then kill the process*/
    if (page == NULL) {
       // Check for stack growth, otherwise exit and free
       uint32_t diff = f->esp - fault_addr;
-		if (PHYS_BASE - vaddr > STACK_LIMIT
+      if (PHYS_BASE - vaddr > STACK_LIMIT
             || (diff > 0 && diff != PUSHA_OVERFLOW && diff != PUSH_OVERFLOW)) {
          PUTBUF_FORMAT("Supp page not found with vaddr = %p. Do not grow stack: exit(-1)", vaddr);
          f->eip = (void (*) (void)) f->eax;
          f->eax = 0xffffffff;
          exit_process(-1);
 		}
-   }
 
-	/* Get the kernel address using the frame. */
-   struct frame *frame = frame_put(vaddr, PAL_USER);
-   ASSERT(frame != NULL);
-   void *kaddr = frame->kaddr;
-
-	bool writable = true;
-   if (page != NULL) {
-      /* Depending on page status... */
-      switch(page->status) {                                                          
+      struct frame *frame = frame_put(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
+      if (frame != NULL) {
+         ASSERT(install_page (vaddr, frame->kaddr, true));
+      }
+   } else {
+       switch(page->status) {                                                    
          case SWAPPED:
             // Handle swap by lazy loading
-            swap_in(vaddr, (size_t) kaddr);
-            page->status = LOADED;
             break;
+
+         case FILE:
+            struct frame *f = frame_lookup(vaddr);
+            if (f == NULL) { // Frame is NULL so allocate
+               f = frame_put(vaddr, PAL_USER);
+               
+               ASSERT(f != NULL);
+               ASSERT(install_page(vaddr, f->kaddr, page->writable));
+               ASSERT(page->file != NULL);
+               
+               off_t original_pos = file_tell(page->file);
+               file_seek(page->file, page->file_offset);
+
+               off_t bytes_read = file_read(page->file, f->kaddr, page->read_bytes);
+               ASSERT(page->read_bytes == 0 || bytes_read == (int) page->read_bytes);
+
+               file_seek(page->file, original_pos);
+
+               memset (f->kaddr + page->read_bytes, 0 , page->zero_bytes);
+            } else if (page->writable && !pagedir_is_writable(t->pagedir, vaddr)) {
+               pagedir_set_writable(t->pagedir, vaddr, page->writable);
+            }
+            
+            break;
+
          case ZERO:
-         /* Page from from is also zeroed out */
-            page->status = LOADED;
             break;
-         case MMAPPED:
-            page->status = MMAPPED;
-            break;
-         case LOADED:
-            PUTBUF("There should not be a fault from a page in memory!!"); 
-            break;
+
          default:
             PUTBUF("Unrecognised page status!!");
             NOT_REACHED();
       }
-   }
 
-   install_page(vaddr, kaddr, writable);
-
-   /* To implement virtual memory, delete the rest of the function
-      body, and replace it with code that brings in the page to
-      which fault_addr refers. */
-   // printf("Page fault at %p: %s error %s page in %s context.\n",
-   //        fault_addr,
-   //        not_present ? "not present" : "rights violation",
-   //        write ? "writing" : "reading",
-   //        user ? "user" : "kernel");
-   // kill (f);
+      return;
+   } 
 }
+

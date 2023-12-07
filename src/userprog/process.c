@@ -575,46 +575,15 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
       /* Check if virtual page already allocated */
-      struct thread *t = thread_current ();
-      uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
-
-      if (page_zero_bytes == PGSIZE) {
-        supp_page_put(upage, ZERO);
-      } else {
-        supp_page_put(upage, MMAPPED);
-      }
+      enum page_status status = page_zero_bytes == PGSIZE ? FILE : FILE;
       
-      if (kpage == NULL) {
-        /* Get a new page of memory. */
-        struct frame *new_frame = frame_put (upage, PAL_USER);
-        if (new_frame == NULL) {
-          return false;
-        }
-        kpage = new_frame->kaddr; 
-        
-        /* Add the page to the process's address space. */
-        if (!install_page (upage, kpage, writable)) {
-          frame_free (new_frame);
-          return false; 
-        }
-
-      } else {
-      
-        if (writable && !pagedir_is_writable(t->pagedir, upage)) {
-          /* Check if writable flag for the page should be updated */
-          pagedir_set_writable(t->pagedir, upage, writable); 
-        }
-      }
-      /* Load data into the page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes){
-        return false; 
-      }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
+      supp_page_put(upage, status, file, ofs, writable, page_read_bytes);
+ 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      ofs += PGSIZE;
     }
   return true;
 }

@@ -18,6 +18,9 @@
 #include "devices/input.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "vm/frame.h"
+#include "vm/page.h"
+#include "vm/mmap.h"
 
 // Calculate offset from esp according to argument number
 #define arg_offs(arg_num, esp) (esp + ((arg_num + 1) * WORD_SIZE))
@@ -75,6 +78,8 @@ static uint8_t safe_get(void *ptr);
 static void safe_put(void *ptr, uint8_t byte);
 static void *validate_buffer(void *ptr, unsigned size);
 static char *validate_string(char *ptr);
+
+static bool check_mapping(void *start, void *end);
 
 void
 syscall_init (void) 
@@ -450,16 +455,95 @@ static void syscall_close(struct intr_frame *f) {
 
 static void syscall_mmap(struct intr_frame *f) {
   int fd_num = pop_arg(0, int);
-  // void *addr = safe_get_buf(safe_get_arg(0, f), );
-  struct fd *fd_ UNUSED = fd_lookup_safe(fd_num);
+  void *addr = pop_arg(1, void *);
 
-  exit_process(-1);
+  struct fd *fd = fd_lookup_safe(fd_num);
+
+  mapid_t map_id = -1;
+
+  if (pg_ofs(addr) != 0) {
+    goto ret;
+  }
+
+  struct file *file = fd->file_info->file;
+  if (file == NULL || addr == NULL || fd->fd_num < 2) {
+    goto ret;
+  }
+
+  lock_acquire(&filesys_lock);
+  uint32_t read_bytes = file_length(file);
+  lock_release(&filesys_lock);
+
+  if (read_bytes == 0 || check_mapping(addr, addr + read_bytes)) {
+    goto ret;
+  }
+
+  map_id = thread_current()->map_id;
+  
+  lock_acquire(&filesys_lock);
+  file = file_reopen(file);
+  lock_release(&filesys_lock);
+
+  int page_cnt = read_bytes % PGSIZE == 0 ? read_bytes / PGSIZE : ((read_bytes / PGSIZE) + 1);
+  void *temp_addr = addr;
+  while (read_bytes > 0) 
+  {
+    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+
+    supp_page_put(addr, FILE, file, 0, true, page_read_bytes);
+      
+    read_bytes -= page_read_bytes;
+    addr += PGSIZE;
+  }
+ 
+  add_mmap_entry(temp_addr, page_cnt);
+  
+  ret:
+    f->eax = map_id;
 }
 
 static void syscall_munmap(struct intr_frame *f) {
-  int mapping UNUSED = pop_arg(0, int);
+  int mapping = pop_arg(0, mapid_t);
 
-  exit_process(-1);
+  struct thread *t = thread_current();
+  struct mmap_entry *mmap_entry = get_mmap_entry(mapping);
+
+  void *start = mmap_entry->start_page;
+
+  if (mmap_entry == NULL) {
+    return;
+  }
+
+  struct supp_page *page 
+    = supp_page_lookup(start);
+  struct file *file = file = page->file;
+
+  if (file == NULL) {
+    return;
+  }
+
+  for (void *curr = start; curr < start + (mmap_entry->page_count * PGSIZE);
+      curr += PGSIZE) {
+    supp_page_remove(curr);
+    frame_free(frame_lookup(curr));
+  }
+
+  delete_mmap_entry(mapping);
+      
+  lock_acquire(&filesys_lock);
+  file_close(file);
+  lock_release(&filesys_lock);
+}
+
+static bool check_mapping(void *start, void *end) {
+  ASSERT(start < end);
+  for(; start <= end; start += PGSIZE) {
+    if (supp_page_lookup(start) != NULL) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /* Acquires filesys lock. */

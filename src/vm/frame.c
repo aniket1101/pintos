@@ -1,5 +1,6 @@
 #include "frame.h"
 #include <hash.h>
+#include "filesys/file.h"
 #include "threads/thread.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
@@ -9,6 +10,8 @@
 #include "userprog/pagedir.h"
 #include "userprog/debug.h"
 #include "devices/swap.h"
+#include "vm/page.h"
+#include "vm/mmap.h"
 
 static hash_hash_func frame_hash;
 static hash_less_func frame_less;
@@ -45,7 +48,8 @@ static bool frame_less(const struct hash_elem *a,
 struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   ASSERT(is_user_vaddr(vaddr));
   flag |= PAL_USER;
-  lock_acquire(&frame_lock);      
+
+  lock_acquire(&frame_lock);   
 
   struct frame *frame = frame_lookup(vaddr);
   // If vaddr already associated with frame, return that frame
@@ -74,7 +78,7 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   ASSERT(hash_insert(&frame_table, &frame->elem) == NULL);
 
   ret: 
-    lock_release(&frame_lock);    
+    lock_release(&frame_lock);  
     return frame;
 }
 

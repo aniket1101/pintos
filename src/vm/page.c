@@ -6,6 +6,7 @@
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "vm/frame.h"
+#include "userprog/debug.h"
 
 static hash_hash_func supp_page_hash;
 static hash_less_func supp_page_less;
@@ -35,21 +36,29 @@ static bool supp_page_less(const struct hash_elem *a,
 
 /* Initialise a supp_page entry with a vaddr and page_status and 
 	 insert to current thread's page table. */
-struct supp_page *supp_page_put(void *vaddr, enum page_status status) {
+struct supp_page *supp_page_put(void *vaddr, enum page_status status, struct file *file, 
+		off_t offset, bool writable, size_t read_bytes) {
+			
 	ASSERT(&thread_current()->supp_page_table != NULL);
 	struct supp_page *supp_page = (struct supp_page *) malloc(sizeof(struct supp_page));
 	if (supp_page == NULL) { // If malloc failed, return NULL
 		return NULL;
 	}
 
-	supp_page->vaddr = pg_round_down(vaddr);
+	// supp_page->vaddr = pg_round_down(vaddr);
+	supp_page->vaddr = vaddr;
 	supp_page->status = status;
+
+	supp_page->file = file;
+	supp_page->writable = writable;
+	supp_page->file_offset = offset;
+	supp_page->read_bytes = read_bytes;
+	supp_page->zero_bytes = PGSIZE - read_bytes;
 	
 	lock_acquire(&supp_page_table_lock);
+	
 	// Insert supp_page to current thread's page table
-	if (hash_insert(&thread_current()->supp_page_table, &supp_page->elem) != NULL) { 
-		supp_page = NULL; // page is NULL if insert failed
-	}
+	ASSERT(hash_insert(&thread_current()->supp_page_table, &supp_page->elem) == NULL);
 
 	lock_release(&supp_page_table_lock);
 	return supp_page;
@@ -62,7 +71,7 @@ struct supp_page *supp_page_lookup(void *vaddr) {
     struct hash_elem *found_elem 
 			= hash_find(&thread_current()->supp_page_table, &page.elem);
 		
-		// Return NULL if no supp_page found, otherwise return found page
+	// Return NULL if no supp_page found, otherwise return found page
     return found_elem == NULL ? NULL : hash_entry(found_elem, struct supp_page, elem);
 }
 
@@ -93,13 +102,6 @@ bool supp_page_remove(void *vaddr) {
 /* Free function for supp_page_table_destroy(). */
 static void supp_page_free(struct hash_elem *elem, void *aux UNUSED) {
 	struct supp_page *page = hash_entry(elem, struct supp_page, elem);
-	if (page->status == LOADED) { // If page was loaded, free the frame
-		void *kaddr = pagedir_get_page(thread_current()->pagedir, page->vaddr);
-		if (kaddr != NULL) {
-			frame_destroy(kaddr);	
-		}
-	}
-
 	free(page);
 }
 
