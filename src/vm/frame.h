@@ -10,6 +10,9 @@ struct frame {
     struct list vpages; //void *vaddr;      /* Virtual address of frame's page. */
     void *kaddr;      /* Kernel (physical) address of frame's page. */
 
+    size_t swap_slot;
+    bool swapped;
+
     struct hash_elem elem;
 };
 

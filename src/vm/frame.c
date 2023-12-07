@@ -112,6 +112,7 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   frame->t = thread_current();
   list_init(&(frame->vpages));
   frame->kaddr = kaddr;
+  frame->swapped = false;
 
   ASSERT(hash_insert(&frame_table, &frame->elem) == NULL);
 
@@ -161,7 +162,14 @@ static struct frame *choose_frame(void) {
     for (struct hash_elem *h = start_elem; h != NULL; h = hash_next(&i)) {
       struct frame *f = hash_entry(h, struct frame, elem);
       if (!frame_is_accessed(f)) {
-        swap_dirty_pages(f);
+        if (list_size(&(f->vpages)) == 1) {
+          // dirty case will not be for shared files so we know vpage size is 1
+          struct vpage *vpage = list_entry(list_front(&(f->vpages)), struct vpage, elem);
+          if (pagedir_is_dirty(f->t->pagedir, vpage->vaddr)) {
+            f->swap_slot = swap_out(vpage->vaddr);
+            f->swapped = true;
+          }
+        }
         clock_hand++;
         return f;
       }
@@ -245,11 +253,14 @@ void frame_destroy(void *kaddr) {
   if (frame == NULL) {
     palloc_free_page(kaddr);
   } else {
-    if (frame_at_clock != NULL 
-        && !frame_less(&frame_at_clock->elem, &frame->elem, NULL)) {
-      frame_at_clock = frame_get_at(clock_hand--);
-    }
+
     if (list_size(&(frame->vpages)) == 1) {
+      if (frame_at_clock != NULL 
+          && !frame_less(&frame_at_clock->elem, &frame->elem, NULL)) {
+        frame_at_clock = frame_get_at(clock_hand--);
+      }
+      if (frame->swapped) swap_drop(frame->swap_slot);
+
       frame_free(frame);
     } else {
       remove_vpage(frame);
@@ -257,7 +268,7 @@ void frame_destroy(void *kaddr) {
   }
 
   lock_release(&frame_lock);
-} 
+}
 
 void remove_vpage(struct frame *frame) {
   for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
