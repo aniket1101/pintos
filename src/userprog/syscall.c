@@ -476,9 +476,18 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
   file = file_reopen(file);
   lock_release(&filesys_lock);
   int page_cnt = read_bytes % PGSIZE == 0 ? read_bytes / PGSIZE : ((read_bytes / PGSIZE) + 1);
+  void *temp_addr = addr;
+  while (read_bytes > 0) 
+  {
+    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 
-  add_to_spt(MMAPPED, addr, file, 0, true);
-  add_mmap_entry(addr, page_cnt);
+    add_to_spt(FILE, addr, file, 0, true, page_read_bytes);
+      
+    read_bytes -= page_read_bytes;
+    addr += PGSIZE;
+  }
+ 
+  add_mmap_entry(temp_addr, page_cnt);
   
   ret:
     return map_id;

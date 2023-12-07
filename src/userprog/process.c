@@ -575,51 +575,23 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
       /* Check if virtual page already allocated */
-      struct thread *t = thread_current ();
-      uint8_t *kpage = pagedir_get_page (t->pagedir, upage);
       enum page_status status;
-       if (page_zero_bytes == PGSIZE) {
-        status = ZERO;
-       } else {
-         status = MMAPPED;
-       }
 
-      add_to_spt(status, upage, file, ofs, writable);
+      if (page_zero_bytes == PGSIZE) {
+        // TODO: change FILE to ZERO and implement ZERO IN PG FAULT
+        status = FILE;
+      }
+      else {
+        status = FILE;
+      }
       
-      if (kpage == NULL){
-        
-        /* Get a new page of memory. */
-        kpage = put_frame (PAL_USER, upage);
-        if (kpage == NULL){
-          return false;
-        }
-        
-        /* Add the page to the process's address space. */
-        if (!install_page (upage, kpage, writable)) 
-        {
-          free_frame (kpage);
-          return false; 
-        }     
-        
-      } else {
-        
-        /* Check if writable flag for the page should be updated */
-        if(writable && !pagedir_is_writable(t->pagedir, upage)){
-          pagedir_set_writable(t->pagedir, upage, writable); 
-        }
-        
-      }
-
-      /* Load data into the page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes){
-        return false; 
-      }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
-
+      add_to_spt(status, upage, file, ofs, writable, page_read_bytes);
+ 
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
       upage += PGSIZE;
+      ofs += PGSIZE;
     }
   return true;
 }
@@ -633,7 +605,7 @@ setup_stack (void **esp)
   bool success = false;
 
   // Need to take into account the zeroed
-  kpage = (uint8_t *) put_frame(PAL_USER | PAL_ZERO, PHYS_BASE - PGSIZE);
+  kpage = (uint8_t *) put_frame(PAL_USER | PAL_ZERO, (uint8_t *)PHYS_BASE - PGSIZE);
   if (kpage != NULL) 
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);

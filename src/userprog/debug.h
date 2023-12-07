@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#define __DEBUG__
+// #define __DEBUG__
 // #define __HEX_DUMP__
 
 #ifdef __DEBUG__ 

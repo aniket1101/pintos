@@ -14,6 +14,8 @@
 #include "vm/page.h"
 #include "vm/mmap.h"
 #include "devices/swap.h"
+#include "userprog/pagedir.h"
+#include <string.h>
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -130,7 +132,7 @@ static void
 page_fault (struct intr_frame *f) 
 {
    bool not_present;  /* True: not-present page, false: writing r/o page. */
-   bool write UNUSED;        /* True: access was write, false: access was read. */
+   bool write;        /* True: access was write, false: access was read. */
    bool user UNUSED;         /* True: access by user, false: access by kernel. */
    void *fault_addr;  /* Fault address. */
    struct thread *t = thread_current(); /* The current thread. */
@@ -156,53 +158,68 @@ page_fault (struct intr_frame *f)
    write = (f->error_code & PF_W) != 0;
    user = (f->error_code & PF_U) != 0;
 	
-   /* If user access has faulted, kill user process. */ 
-   if (!is_user_vaddr(fault_addr) || fault_addr == NULL || !not_present) {
-      kernel_exit(-1);
-   }
-
 	/* Round the fault address down to a page boundary. */
    void* vaddr = pg_round_down(fault_addr);
 
-   /* Get the relevant page from this thread's page table. */
-   struct supp_page *page = get_supp_page_table(&t->supp_page_table, vaddr);
+   if (not_present && is_user_vaddr(fault_addr)) {
 
-   /* If the page does not exists then kill the process*/
-   if (page == NULL) {
-      // Check for stack growth, otherwise exit and free
-      kernel_exit(-1);
-   } else {
-      /* Get the kernel address using the frame. */
-      void *kaddr = put_frame(PAL_USER, vaddr);
-      bool writable = true;
+      /* Get the relevant page from this thread's page table. */
+      struct supp_page *page = get_supp_page_table(&t->supp_page_table, vaddr);
+      
+      /* If the page does not exists then kill the process*/
+      if (page == NULL) {
+         // Check for stack growth, otherwise exit and free
+         kernel_exit(-1);
+      } else {
+         switch(page->status) {                                                    
+            case SWAPPED:
+            PUTBUF("IN SWAPPED");
+               // Handle swap by lazy loading
+               break;
+            case FILE:
+               PUTBUF("in FILE fault");
+               void *kpage = pagedir_get_page(t->pagedir, vaddr);
+               if (kpage == NULL) {
+                  //allocate frame if null, otherwise update existing entry
 
-      /* Depending on page status... */
-      switch(page->status) {                                                          
-         case SWAPPED:
-            // Handle swap by lazy loading
-            swap_in(vaddr, (size_t) kaddr);
-            page->status = LOADED;
-            break;
-         case ZERO:
-         /* Page from from is also zeroed out */
-            page->status = LOADED;
-            break;
-         case MMAPPED:
-            struct mmap_entry *mmap_entry = get_mmap_entry(page->map_id);
-            writable = page->is_writable;
-            lock_filesys_access();
-            file_seek(page->file, page->file_offset);
-            file_read(page->file, kaddr, mmap_entry->page_count * PGSIZE);
-            unlock_filesys_access();
-            page->status = MMAPPED;
-            break;
-         case LOADED:
-            PUTBUF("There should not be a fault from a page in memory!!"); 
-            break;
-         default:
-            PUTBUF("Unrecognised page status!!");
-            NOT_REACHED();
+                  kpage = put_frame(PAL_USER, vaddr);
+                  struct frame *f = get_frame(kpage);
+                  ASSERT(f != NULL);
+                  
+                  if (!install_page(vaddr, kpage, page->is_writable)) {
+                     kernel_exit(-1);
+                  }
+
+                  if (page->file == NULL) {
+                     kernel_exit(-1);
+                  }
+                  
+                  off_t original_pos = file_tell(page->file);
+                  file_seek(page->file, page->file_offset);
+
+                  off_t bytes_read = file_read(page->file, kpage, page->page_read_bytes);
+                  if (page->page_read_bytes != 0 && bytes_read != (int) page->page_read_bytes) {
+                     PUTBUF_FORMAT("READ %d bytes", bytes_read);
+                     kernel_exit(-1);
+                  }
+
+                  file_seek(page->file, original_pos);
+
+                  memset (kpage + page->page_read_bytes, 0 , PGSIZE - page->page_read_bytes);
+               } else {
+                  if (page->is_writable && !pagedir_is_writable(t->pagedir, vaddr)) {
+                     pagedir_set_writable(t->pagedir, vaddr, page->is_writable);
+                  }
+               }
+               return;
+               break;      
+            case ZERO:
+               break;
+            default:
+               PUTBUF("Unrecognised page status!!");
+               NOT_REACHED();
+         }
+         /* Add the page to the process's address space. */
       }
-      install_page(vaddr, kaddr, writable);
    }
 }
