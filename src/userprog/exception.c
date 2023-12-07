@@ -19,7 +19,8 @@
 #include "debug.h"
 
 #define STACK_LIMIT (8 * (1 << 20))
-#define PUSH_OVERFLOW 32
+#define PUSHA_OVERFLOW 32
+#define PUSH_OVERFLOW 4
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -162,65 +163,64 @@ page_fault (struct intr_frame *f)
    write = (f->error_code & PF_W) != 0;
    user = (f->error_code & PF_U) != 0;
 	
+   if (!is_user_vaddr(fault_addr) || fault_addr == NULL || !not_present) {
+      kernel_exit(-1);
+   }
+
 	/* Round the fault address down to a page boundary. */
    void* vaddr = pg_round_down(fault_addr);
 
-   if (not_present && is_user_vaddr(fault_addr)) {
-
-      /* Get the relevant page from this thread's page table. */
-      struct supp_page *page = supp_page_lookup(vaddr);
-      
-      /* If the page does not exists then kill the process*/
-      if (page == NULL) {
-         // Check for stack growth, otherwise exit and free
+   /* Get the relevant page from this thread's page table. */
+   struct supp_page *page = supp_page_lookup(vaddr);
+   
+   /* If the page does not exists then kill the process*/
+   if (page == NULL) {
+      // Check for stack growth, otherwise exit and free
+      uint32_t diff = f->esp - fault_addr;
+      if (PHYS_BASE - vaddr > STACK_LIMIT
+            || (diff > 0 && diff != PUSHA_OVERFLOW && diff != PUSH_OVERFLOW)) {
          kernel_exit(-1);
-      } else {
-         switch(page->status) {                                                    
-            case SWAPPED:
-               // Handle swap by lazy loading
-               break;
-            case FILE:
-               void *kpage = pagedir_get_page(t->pagedir, vaddr);
-               if (kpage == NULL) {
-                  //allocate frame if null, otherwise update existing entry
-
-                  struct frame *f = frame_put(vaddr, PAL_USER);
-                  ASSERT(f != NULL);
-                  kpage = f->kaddr;
-
-                  if (!install_page(vaddr, kpage, page->writable)) {
-                     kernel_exit(-1);
-                  }
-
-                  if (page->file == NULL) {
-                     kernel_exit(-1);
-                  }
-                  
-                  off_t original_pos = file_tell(page->file);
-                  file_seek(page->file, page->file_offset);
-
-                  off_t bytes_read = file_read(page->file, kpage, page->read_bytes);
-                  if (page->read_bytes != 0 && bytes_read != (int) page->read_bytes) {
-                     kernel_exit(-1);
-                  }
-
-                  file_seek(page->file, original_pos);
-
-                  memset (kpage + page->read_bytes, 0 , PGSIZE - page->read_bytes);
-               } else {
-                  if (page->writable && !pagedir_is_writable(t->pagedir, vaddr)) {
-                     pagedir_set_writable(t->pagedir, vaddr, page->writable);
-                  }
-               }
-               return;
-               break;      
-            case ZERO:
-               break;
-            default:
-               PUTBUF("Unrecognised page status!!");
-               NOT_REACHED();
-         }
-         /* Add the page to the process's address space. */
       }
-   }
+         
+      frame_put(vaddr, PAL_USER);
+   } else {
+      switch(page->status) {                                                    
+         case SWAPPED:
+            // Handle swap by lazy loading
+            break;
+
+         case FILE:
+            struct frame *f = frame_lookup(vaddr);
+            if (f == NULL) { // Frame is NULL so allocate
+               f = frame_put(vaddr, PAL_USER);
+               
+               ASSERT(f != NULL);
+               ASSERT(install_page(vaddr, f->kaddr, page->writable));
+               ASSERT(page->file != NULL);
+               
+               off_t original_pos = file_tell(page->file);
+               file_seek(page->file, page->file_offset);
+
+               off_t bytes_read = file_read(page->file, f->kaddr, page->read_bytes);
+               ASSERT(page->read_bytes == 0 || bytes_read == (int) page->read_bytes);
+
+               file_seek(page->file, original_pos);
+
+               memset (f->kaddr + page->read_bytes, 0 , page->zero_bytes);
+            } else if (page->writable && !pagedir_is_writable(t->pagedir, vaddr)) {
+               pagedir_set_writable(t->pagedir, vaddr, page->writable);
+            }
+            
+            break;
+
+         case ZERO:
+            break;
+
+         default:
+            PUTBUF("Unrecognised page status!!");
+            NOT_REACHED();
+      }
+
+      return;
+   } 
 }

@@ -574,15 +574,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
       /* Check if virtual page already allocated */
-      enum page_status status;
-
-      if (page_zero_bytes == PGSIZE) {
-        // TODO: change FILE to ZERO and implement ZERO IN PG FAULT
-        status = FILE;
-      }
-      else {
-        status = FILE;
-      }
+      enum page_status status = page_zero_bytes == PGSIZE ? FILE : FILE;
       
       supp_page_put(upage, status, file, ofs, writable, page_read_bytes);
  
