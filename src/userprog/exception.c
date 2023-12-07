@@ -177,17 +177,13 @@ page_fault (struct intr_frame *f)
       } else {
          switch(page->status) {                                                    
             case SWAPPED:
-            PUTBUF("IN SWAPPED");
                // Handle swap by lazy loading
                break;
             case FILE:
-               PUTBUF("in FILE fault");
-               PUTBUF("FILE PAGE FAULT DIR GET PAGE");
                void *kpage = pagedir_get_page(t->pagedir, vaddr);
                if (kpage == NULL) {
                   //allocate frame if null, otherwise update existing entry
 
-                  PUTBUF("FILE fault put frame");
                   struct frame *f = frame_put(vaddr, PAL_USER);
                   ASSERT(f != NULL);
                   kpage = f->kaddr;
@@ -205,7 +201,6 @@ page_fault (struct intr_frame *f)
 
                   off_t bytes_read = file_read(page->file, kpage, page->read_bytes);
                   if (page->read_bytes != 0 && bytes_read != (int) page->read_bytes) {
-                     PUTBUF_FORMAT("READ %d bytes", bytes_read);
                      kernel_exit(-1);
                   }
 

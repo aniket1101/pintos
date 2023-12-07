@@ -44,15 +44,14 @@ static bool frame_less(const struct hash_elem *a,
 struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   ASSERT(is_user_vaddr(vaddr));
   flag |= PAL_USER;
-  lock_acquire(&frame_lock);      
-  PUTBUF("lookup to put the frame");
+
+  lock_acquire(&frame_lock);   
+
   struct frame *frame = frame_lookup(vaddr);
   // If vaddr already associated with frame, return that frame
   if (frame != NULL) { 
-    PUTBUF("frame already in hash");
     goto ret; 
   } 
-  PUTBUF("make frame");
 
   frame = (struct frame *) malloc(sizeof(struct frame));
   // If malloc failed, return NULL
@@ -75,8 +74,6 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
 
   ret: 
     lock_release(&frame_lock);  
-    PUTBUF("finished making frame");
-
     return frame;
 }
 
@@ -91,7 +88,6 @@ struct frame *frame_kaddr_lookup(void *kaddr) {
 
 struct frame *frame_lookup(void *vaddr) {
   // // Find frame with kernel address kaddr
-  PUTBUF("FRAME LOOKUP DIR GET PAGE");
   void *kaddr = pagedir_get_page(thread_current()->pagedir, vaddr);
   return kaddr == NULL ? NULL : frame_kaddr_lookup(kaddr);
 }
@@ -148,6 +144,7 @@ void free_frame(void *kaddr) {
   if (should_lock) {
     lock_acquire(&frame_lock);
   }
+  
   struct frame *frame = frame_kaddr_lookup(kaddr);
   if (frame != NULL) {
     ASSERT(hash_delete(&frame_table, &frame->elem) != NULL);

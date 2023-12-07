@@ -513,7 +513,6 @@ static inline void kernel_munmap(mapid_t mapping) {
 
   for (void *curr = start; curr < start + (mmap_entry->page_count * PGSIZE);
       curr += PGSIZE) {
-        PUTBUF("MUNMAP DIR GET PAGE");
         void *kaddr = pagedir_get_page(t->pagedir, curr);
         if (kaddr != NULL) {
           free(frame_kaddr_lookup(kaddr));

@@ -103,15 +103,9 @@ bool supp_page_remove(void *vaddr) {
 
 /* Free function for supp_page_table_destroy(). */
 static void supp_page_free(struct hash_elem *elem, void *aux UNUSED) {
-	// struct supp_page *page = hash_entry(elem, struct supp_page, elem);
-	// if (page->status == LOADED) { // If page was loaded, free the frame
-	// 	void *kaddr = pagedir_get_page(thread_current()->pagedir, page->vaddr);
-	// 	if (kaddr != NULL) {
-	// 		free_frame(kaddr);	
-	// 	}
-	// }
-
-	// free(page);
+	struct supp_page *page = hash_entry(elem, struct supp_page, elem);
+	free_frame(frame_kaddr_lookup(page->vaddr));	
+	free(page);
 }
 
 /* Destroy thread t's supp_page hash table, freeing each entry. */
