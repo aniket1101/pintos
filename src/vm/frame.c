@@ -11,6 +11,7 @@
 #include "devices/swap.h"
 #include "filesys/file.h"
 #include <list.h>
+#include "vm/page.h"
 
 static hash_hash_func frame_hash;
 static hash_less_func frame_less;
@@ -28,6 +29,8 @@ static struct frame *choose_frame(void);
 static struct frame *frame_get_at(int index);
 bool frame_is_accessed(struct frame *frame);
 void swap_dirty_pages(struct frame *frame);
+struct shared_file *get_shared_file(struct frame *frame);
+void remove_vpage(struct frame *frame);
 
 void frame_table_init(void) {
   hash_init(&frame_table, &frame_hash, &frame_less, NULL);
@@ -158,7 +161,7 @@ static struct frame *choose_frame(void) {
     for (struct hash_elem *h = start_elem; h != NULL; h = hash_next(&i)) {
       struct frame *f = hash_entry(h, struct frame, elem);
       if (!frame_is_accessed(f)) {
-        set_in_swap(f);
+        swap_dirty_pages(f);
         clock_hand++;
         return f;
       }
@@ -195,9 +198,33 @@ void swap_dirty_pages(struct frame *frame) {
 
 void frame_free(struct frame *frame) {
   ASSERT(frame != NULL);
-  palloc_free_page(frame->kaddr);
+
+  for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
+    struct vpage *vpage = list_entry (e, struct vpage, elem);
+    free(vpage);
+  }
+  struct shared_file *shared_file = get_shared_file(frame);
+  if (shared_file != NULL) {
+    free(shared_file);
+  }
   ASSERT(hash_delete(&frame_table, &frame->elem) != NULL);
+  palloc_free_page(frame->kaddr);
   free(frame);
+}
+
+struct shared_file *get_shared_file(struct frame *frame) {
+    if (!hash_empty(&shared_files)) {
+    struct hash_iterator i;
+    hash_first (&i, &shared_files);
+
+    while (hash_next (&i)) { // Loop through the hash
+      struct shared_file *s_file = hash_entry (hash_cur (&i), struct shared_file, elem);
+      if (frame == s_file->frame) {
+        return s_file;
+      }
+    }
+  }
+  return NULL;
 }
 
 static struct frame *frame_get_at(int index) {
@@ -222,9 +249,24 @@ void frame_destroy(void *kaddr) {
         && !frame_less(&frame_at_clock->elem, &frame->elem, NULL)) {
       frame_at_clock = frame_get_at(clock_hand--);
     }
-
-    frame_free(frame);
+    if (list_size(&(frame->vpages)) == 1) {
+      frame_free(frame);
+    } else {
+      remove_vpage(frame);
+    }
   }
 
   lock_release(&frame_lock);
 } 
+
+void remove_vpage(struct frame *frame) {
+  for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
+    struct vpage *vpage = list_entry (e, struct vpage, elem);
+    struct supp_page sp;
+    sp.vaddr = vpage->vaddr;
+    if (hash_find(&(thread_current()->supp_page_table), &(sp.elem)) != NULL) {
+      list_remove(&(vpage->elem));
+      free(vpage);
+    }
+  }
+}
