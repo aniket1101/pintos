@@ -10,6 +10,7 @@
 #include "userprog/debug.h"
 #include "devices/swap.h"
 #include "filesys/file.h"
+#include <list.h>
 
 static hash_hash_func frame_hash;
 static hash_less_func frame_less;
@@ -24,8 +25,9 @@ static int clock_hand;
 static struct frame *frame_at_clock;
 
 static struct frame *choose_frame(void);
-static struct frame *choose_frame_lru(void);
 static struct frame *frame_get_at(int index);
+bool frame_is_accessed(struct frame *frame);
+void swap_dirty_pages(struct frame *frame);
 
 void frame_table_init(void) {
   hash_init(&frame_table, &frame_hash, &frame_less, NULL);
@@ -130,17 +132,6 @@ struct frame *frame_lookup(void *vaddr) {
   return kaddr == NULL ? NULL : frame_kaddr_lookup(kaddr);
 }
 
-static struct frame *choose_frame_lru(void) {
-  struct hash_iterator i;
-  hash_first(&i, &frame_table);
-  struct frame *f = NULL;
-  while (f == NULL) {
-    f = hash_entry(hash_next(&i), struct frame, elem);
-  }
-
-  return f;
-}
-
 void evict_frame(void) {
   struct frame *to_evict = choose_frame();
   ASSERT (to_evict != NULL); 
@@ -149,9 +140,9 @@ void evict_frame(void) {
 
 /* Choose the frame to be evicted according to clock replacement algorithm. */
 static struct frame *choose_frame(void) {
-//   if (hash_empty(&frame_table)) {
-//     return NULL;
-//   }
+  if (hash_empty(&frame_table)) {
+    return NULL;
+  }
 
   struct hash_iterator i;  
   hash_first (&i, &frame_table);
@@ -166,17 +157,12 @@ static struct frame *choose_frame(void) {
   while (true) {
     for (struct hash_elem *h = start_elem; h != NULL; h = hash_next(&i)) {
       struct frame *f = hash_entry(h, struct frame, elem);
-      if (!pagedir_is_accessed(f->t->pagedir, f->vaddr)) {
-        if (pagedir_is_dirty(f->t->pagedir, f->vaddr)) {
-          swap_out(f->vaddr);
-        }
-
+      if (!frame_is_accessed(f)) {
+        set_in_swap(f);
         clock_hand++;
         return f;
       }
 
-      pagedir_set_accessed(f->t->pagedir, f->vaddr, false);
-      
       clock_hand++;
       frame_at_clock = f;
     }
@@ -184,6 +170,26 @@ static struct frame *choose_frame(void) {
     hash_first(&i, &frame_table);
     start_elem = hash_next(&i); 
     clock_hand = 0;
+  }
+}
+
+bool frame_is_accessed(struct frame *frame) {
+  for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
+      struct vpage *vpage = list_entry (e, struct vpage, elem);
+    if (pagedir_is_accessed(frame->t->pagedir, vpage->vaddr)) {
+      pagedir_set_accessed(frame->t->pagedir, vpage->vaddr, false);
+      return true;
+    }
+  }
+  return false;
+}
+
+void swap_dirty_pages(struct frame *frame) {
+  for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
+      struct vpage *vpage = list_entry (e, struct vpage, elem);
+    if (pagedir_is_dirty(frame->t->pagedir, vpage->vaddr)) {
+      swap_out(vpage->vaddr);
+    }
   }
 }
 
