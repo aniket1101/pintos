@@ -3,6 +3,8 @@
 
 #include <hash.h>
 #include "../threads/thread.h"
+#include "filesys/off_t.h"
+
 
 enum page_status {
     SWAPPED,                    /* Swapped out */
@@ -12,6 +14,9 @@ enum page_status {
 };
 
 struct supp_page {
+    off_t file_offset;
+    size_t page_read_bytes;
+    struct file *file;
     void *vaddr;                /* Virtual memory address for a page */
     enum page_status status;    /* Status of a page */
     

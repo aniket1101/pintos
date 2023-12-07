@@ -197,15 +197,24 @@ bool frame_is_accessed(struct frame *frame) {
 
 void frame_free(struct frame *frame) {
   ASSERT(frame != NULL);
+  frame->t = thread_current();
+  if (list_size(&(frame->vpages)) == 1) {
+    struct vpage *vpage = list_entry(list_front(&(frame->vpages)), struct vpage, elem);
+    if (pagedir_is_dirty(frame->t->pagedir, vpage->vaddr)) {
+      // struct supp_page *page = supp_page_lookup(vpage->vaddr);
+      // file_write_at(page->file, vpage->vaddr, page->page_read_bytes, page->file_offset);
+    }
+  }
 
   for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
-    struct vpage *vpage = list_entry (e, struct vpage, elem);
-    free(vpage);
+    free(list_entry (e, struct vpage, elem));
   }
+
   struct shared_file *shared_file = get_shared_file(frame);
   if (shared_file != NULL) {
     free(shared_file);
   }
+
   ASSERT(hash_delete(&frame_table, &frame->elem) != NULL);
   palloc_free_page(frame->kaddr);
   free(frame);
@@ -251,7 +260,6 @@ void frame_destroy(void *kaddr) {
         frame_at_clock = frame_get_at(clock_hand--);
       }
       if (frame->swapped) swap_drop(frame->swap_slot);
-
       frame_free(frame);
     } else {
       remove_vpage(frame);
