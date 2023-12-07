@@ -16,6 +16,10 @@
 #include "devices/swap.h"
 #include "userprog/pagedir.h"
 #include <string.h>
+#include "debug.h"
+
+#define STACK_LIMIT (8 * (1 << 20))
+#define PUSH_OVERFLOW 32
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -132,7 +136,7 @@ static void
 page_fault (struct intr_frame *f) 
 {
    bool not_present;  /* True: not-present page, false: writing r/o page. */
-   bool write;        /* True: access was write, false: access was read. */
+   bool write UNUSED;        /* True: access was write, false: access was read. */
    bool user UNUSED;         /* True: access by user, false: access by kernel. */
    void *fault_addr;  /* Fault address. */
    struct thread *t = thread_current(); /* The current thread. */
@@ -164,7 +168,7 @@ page_fault (struct intr_frame *f)
    if (not_present && is_user_vaddr(fault_addr)) {
 
       /* Get the relevant page from this thread's page table. */
-      struct supp_page *page = get_supp_page_table(&t->supp_page_table, vaddr);
+      struct supp_page *page = supp_page_lookup(vaddr);
       
       /* If the page does not exists then kill the process*/
       if (page == NULL) {
@@ -178,15 +182,17 @@ page_fault (struct intr_frame *f)
                break;
             case FILE:
                PUTBUF("in FILE fault");
+               PUTBUF("FILE PAGE FAULT DIR GET PAGE");
                void *kpage = pagedir_get_page(t->pagedir, vaddr);
                if (kpage == NULL) {
                   //allocate frame if null, otherwise update existing entry
 
-                  kpage = put_frame(PAL_USER, vaddr);
-                  struct frame *f = get_frame(kpage);
+                  PUTBUF("FILE fault put frame");
+                  struct frame *f = frame_put(vaddr, PAL_USER);
                   ASSERT(f != NULL);
-                  
-                  if (!install_page(vaddr, kpage, page->is_writable)) {
+                  kpage = f->kaddr;
+
+                  if (!install_page(vaddr, kpage, page->writable)) {
                      kernel_exit(-1);
                   }
 
@@ -197,18 +203,18 @@ page_fault (struct intr_frame *f)
                   off_t original_pos = file_tell(page->file);
                   file_seek(page->file, page->file_offset);
 
-                  off_t bytes_read = file_read(page->file, kpage, page->page_read_bytes);
-                  if (page->page_read_bytes != 0 && bytes_read != (int) page->page_read_bytes) {
+                  off_t bytes_read = file_read(page->file, kpage, page->read_bytes);
+                  if (page->read_bytes != 0 && bytes_read != (int) page->read_bytes) {
                      PUTBUF_FORMAT("READ %d bytes", bytes_read);
                      kernel_exit(-1);
                   }
 
                   file_seek(page->file, original_pos);
 
-                  memset (kpage + page->page_read_bytes, 0 , PGSIZE - page->page_read_bytes);
+                  memset (kpage + page->read_bytes, 0 , PGSIZE - page->read_bytes);
                } else {
-                  if (page->is_writable && !pagedir_is_writable(t->pagedir, vaddr)) {
-                     pagedir_set_writable(t->pagedir, vaddr, page->is_writable);
+                  if (page->writable && !pagedir_is_writable(t->pagedir, vaddr)) {
+                     pagedir_set_writable(t->pagedir, vaddr, page->writable);
                   }
                }
                return;

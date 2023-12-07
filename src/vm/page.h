@@ -4,6 +4,7 @@
 #include <hash.h>
 #include <stdbool.h>
 #include "filesys/off_t.h"
+#include "threads/thread.h"
 
 enum page_status {
     FILE,                       /* In the file system */
@@ -12,24 +13,27 @@ enum page_status {
 };
 
 struct supp_page {
-    int map_id;
-    struct file *file;
-    off_t file_offset;
-    size_t page_read_bytes;
-    enum page_status status;    /* Status of a page */
     void *vaddr;                /* Virtual memory address for a page */
-    bool is_writable;           /* Tracks whether a page can be written to */
+    enum page_status status;    /* Status of a page */
+
+    struct file *file;
+    bool writable;           /* Tracks whether a page can be written to */
+    off_t file_offset;
+    size_t read_bytes;        /* A page's read bytes */
+    size_t zero_bytes;        /* A page's zero bytes */
+    
     struct hash_elem elem;      /* Allows for hash of pages */
 };
 
 
-bool supp_page_table_init(struct hash *hash_table);
-void supp_page_table_destroy(struct hash *hash_table);
-struct supp_page *get_supp_page_table(struct hash *hash_table, void *vaddr);
-void add_to_spt(enum page_status status, void *vaddr, struct file *file, off_t offset, bool is_writable, size_t page_read_bytes);
-void remove_supp_page(struct hash *hash_table, void *vaddr);
-
-
-
+void supp_page_table_system_init(void);
+void supp_page_table_init(struct thread *t);
+struct supp_page *supp_page_put(void *vaddr, enum page_status status, struct file *file, 
+		off_t offset, bool writable, size_t read_bytes);
+        
+// struct supp_page *supp_page_put(void *vaddr, enum page_status status);
+struct supp_page *supp_page_lookup(void *vaddr);
+bool supp_page_remove(void *vaddr);
+void supp_page_table_destroy(struct thread *t);
 
 #endif /* vm/page.h*/

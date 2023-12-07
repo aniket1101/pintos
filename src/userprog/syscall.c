@@ -481,7 +481,7 @@ static inline int kernel_mmap(void *addr, struct fd *fd) {
   {
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 
-    add_to_spt(FILE, addr, file, 0, true, page_read_bytes);
+    supp_page_put(addr, FILE, file, 0, true, page_read_bytes);
       
     read_bytes -= page_read_bytes;
     addr += PGSIZE;
@@ -504,7 +504,7 @@ static inline void kernel_munmap(mapid_t mapping) {
   }
 
   struct supp_page *page 
-    = get_supp_page_table(&t->supp_page_table, start);
+    = supp_page_lookup(start);
   struct file *file = file = page->file;
 
   if (file == NULL) {
@@ -513,14 +513,14 @@ static inline void kernel_munmap(mapid_t mapping) {
 
   for (void *curr = start; curr < start + (mmap_entry->page_count * PGSIZE);
       curr += PGSIZE) {
-
+        PUTBUF("MUNMAP DIR GET PAGE");
         void *kaddr = pagedir_get_page(t->pagedir, curr);
         if (kaddr != NULL) {
-          wipe_frame_memory(kaddr);
+          free(frame_kaddr_lookup(kaddr));
           pagedir_clear_page(t->pagedir, curr);
         }
 
-        remove_supp_page(&t->supp_page_table, curr);
+        supp_page_remove(curr);
   }
 
   delete_mmap_entry(mapping);
@@ -532,13 +532,12 @@ static inline void kernel_munmap(mapid_t mapping) {
 
 static bool check_mapping(void *start, void *end) {
   ASSERT(start < end);
-
-  struct thread *t = thread_current();
   for(; start <= end; start += PGSIZE) {
-    if (get_supp_page_table(&t->supp_page_table, start) != NULL) {
+    if (supp_page_lookup(start) != NULL) {
       return true;
     }
   }
+
   return false;
 }
 

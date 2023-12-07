@@ -1,3 +1,5 @@
+#include "userprog/process.h"
+#include <hash.h>
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -5,7 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <user/syscall.h>
-#include "userprog/process.h"
 #include "userprog/syscall.h"
 #include "userprog/fd.h"
 #include "userprog/pc_link.h"
@@ -25,11 +26,9 @@
 #include "debug.h"
 #include "threads/malloc.h"
 #include "filesys/file.h"
-#include <hash.h>
 #include "vm/frame.h"
 #include "vm/page.h"
 #include "vm/mmap.h"
-
 
 #define PUSH_ESP(val, type) \
   if_->esp -= sizeof(type); \
@@ -585,7 +584,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
         status = FILE;
       }
       
-      add_to_spt(status, upage, file, ofs, writable, page_read_bytes);
+      supp_page_put(upage, status, file, ofs, writable, page_read_bytes);
  
       /* Advance. */
       read_bytes -= page_read_bytes;
@@ -601,20 +600,18 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 static bool
 setup_stack (void **esp) 
 {
-  uint8_t *kpage;
   bool success = false;
 
   // Need to take into account the zeroed
-  kpage = (uint8_t *) put_frame(PAL_USER | PAL_ZERO, (uint8_t *)PHYS_BASE - PGSIZE);
-  if (kpage != NULL) 
-    {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
-      if (success) {
-        *esp = PHYS_BASE;
-      } else {  
-        free_frame (kpage);
-      }
+  struct frame *frame = frame_put(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
+  if (frame != NULL) {
+    success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, frame->kaddr, true);
+    if (success) {
+      *esp = PHYS_BASE;
+    } else {  
+      free_frame (frame);
     }
+  }
   return success;
 }
 
@@ -634,6 +631,8 @@ install_page (void *upage, void *kpage, bool writable)
 
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
+  PUTBUF("INSTALL PAGE DIR GET PAGE");
+
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
