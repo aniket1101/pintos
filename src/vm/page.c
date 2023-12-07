@@ -5,6 +5,7 @@
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
 #include "vm/frame.h"
+#include "userprog/debug.h"
 
 static hash_hash_func supp_page_table_hash;
 static hash_less_func supp_page_table_less;
@@ -24,28 +25,23 @@ void supp_page_table_destroy(struct hash *hash_table) {
 
 static void free_page_table(struct hash_elem *elem, void *aux UNUSED) {
     struct supp_page *page = hash_entry(elem, struct supp_page, elem);
-    switch(page->status) {
-        case LOADED:
-            void *kaddr = pagedir_get_page(thread_current()->pagedir,
-                                           page->vaddr);
-            ASSERT(kaddr != NULL);
-            free_frame(kaddr);
-            break;
-        
-        default:
-            break;
-    }
+
+    // void *kaddr = pagedir_get_page(thread_current()->pagedir,
+    //                                page->vaddr);
+    // ASSERT(kaddr != NULL);
+    // free_frame(kaddr);
+
 }
 
 struct supp_page *get_supp_page_table(struct hash *hash_table, void *vaddr) {
     struct supp_page page;
     page.vaddr = vaddr;
-    struct hash_elem *entry = hash_find(hash_table, &page.elem);
-    return entry == NULL ? NULL : hash_entry(entry, struct supp_page, elem);
+    struct hash_elem *elem = hash_find(hash_table, &page.elem);
+    return elem == NULL ? NULL : hash_entry(elem, struct supp_page, elem);
 }
 
 void add_to_spt(enum page_status status, void *vaddr, struct file *file,
-                    off_t offset, bool is_writable) {
+                    off_t offset, bool is_writable, size_t page_read_bytes) {
     struct supp_page *el = (struct supp_page *) malloc(sizeof(struct supp_page));
     ASSERT(el != NULL);
     el->map_id = thread_current()->map_id;
@@ -55,15 +51,13 @@ void add_to_spt(enum page_status status, void *vaddr, struct file *file,
     el->is_writable = is_writable;
     el->vaddr = vaddr;
     el->status = status;
-    struct hash_elem *entry = hash_insert(&(thread_current()->supp_page_table), &(el->elem));
-    if (entry != NULL) {
-        hash_entry(entry, struct supp_page, elem)->status = status;
-    }
+    el->page_read_bytes = page_read_bytes;
+    ASSERT(hash_insert(&(thread_current()->supp_page_table), &(el->elem)) == NULL);
 }
 
 void remove_supp_page(struct hash *hash_table, void *vaddr) {
     struct supp_page page;
-    page.vaddr =vaddr;
+    page.vaddr = vaddr;
     struct hash_elem *elem = hash_delete(hash_table, &page.elem);
 
     ASSERT(elem != NULL);

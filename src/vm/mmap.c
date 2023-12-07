@@ -2,6 +2,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "filesys/file.h"
+#include "userprog/debug.h"
 
 
 static hash_hash_func mmap_entry_hash;
@@ -32,10 +33,9 @@ bool add_mmap_entry(void *start_page, int page_cnt) {
 }
 
 struct mmap_entry *get_mmap_entry(mapid_t map_id) {
-  struct mmap_entry map_link;
-  map_link.map_id = map_id;
-  return hash_entry(hash_find(&(thread_current()->mmap_table), &map_link.elem),
-    struct mmap_entry, elem);
+  struct mmap_entry map_entry = {.map_id = map_id};
+  struct hash_elem *elem = hash_find(&(thread_current()->mmap_table), &(map_entry.elem));
+  return elem == NULL ? NULL : hash_entry(elem, struct mmap_entry, elem);
 }
 
 bool delete_mmap_entry(mapid_t map_id) {
