@@ -28,7 +28,6 @@ static struct frame *frame_at_clock;
 static struct frame *choose_frame(void);
 static struct frame *frame_get_at(int index);
 bool frame_is_accessed(struct frame *frame);
-void swap_dirty_pages(struct frame *frame);
 struct shared_file *get_shared_file(struct frame *frame);
 void remove_vpage(struct frame *frame);
 
@@ -161,6 +160,7 @@ static struct frame *choose_frame(void) {
   while (true) {
     for (struct hash_elem *h = start_elem; h != NULL; h = hash_next(&i)) {
       struct frame *f = hash_entry(h, struct frame, elem);
+      f->t = thread_current();
       if (!frame_is_accessed(f)) {
         if (list_size(&(f->vpages)) == 1) {
           // dirty case will not be for shared files so we know vpage size is 1
@@ -193,15 +193,6 @@ bool frame_is_accessed(struct frame *frame) {
     }
   }
   return false;
-}
-
-void swap_dirty_pages(struct frame *frame) {
-  for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
-      struct vpage *vpage = list_entry (e, struct vpage, elem);
-    if (pagedir_is_dirty(frame->t->pagedir, vpage->vaddr)) {
-      swap_out(vpage->vaddr);
-    }
-  }
 }
 
 void frame_free(struct frame *frame) {
