@@ -23,6 +23,7 @@
 #define STACK_LIMIT (8 * (1 << 20))
 #define PUSHA_OVERFLOW 32
 #define PUSH_OVERFLOW 4
+#define EAX_ERR 0xffffffff
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -179,16 +180,16 @@ page_fault (struct intr_frame *f)
    /* If the page does not exists then kill the process*/
    if (page == NULL) {
       // Check for stack growth, otherwise exit and free
-      uint32_t diff = f->esp - fault_addr;
+      int diff = ((uint32_t) f->esp) - ((uint32_t) fault_addr);
       if (PHYS_BASE - vaddr > STACK_LIMIT
-            || (diff > 0 && diff != PUSHA_OVERFLOW && diff != PUSH_OVERFLOW)) {
+            || (diff > 0 && diff != PUSH_OVERFLOW && diff != PUSHA_OVERFLOW)) {
          PUTBUF_FORMAT("Supp page not found with vaddr = %p. Do not grow stack: exit(-1)", vaddr);
          f->eip = (void (*) (void)) f->eax;
-         f->eax = 0xffffffff;
+         f->eax = EAX_ERR;
          exit_process(-1);
 		}
 
-      struct frame *frame = frame_put(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
+      struct frame *frame = frame_put(vaddr, PAL_USER | PAL_ZERO);
       if (frame != NULL) {
          ASSERT(install_page (vaddr, frame->kaddr, true));
       }
