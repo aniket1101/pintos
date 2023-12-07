@@ -525,7 +525,11 @@ static void syscall_munmap(struct intr_frame *f) {
   for (void *curr = start; curr < start + (mmap_entry->page_count * PGSIZE);
       curr += PGSIZE) {
     supp_page_remove(curr);
-    frame_free(frame_lookup(curr));
+    struct frame *f = frame_lookup(curr);
+
+    if (f != NULL) {
+      frame_free(f);
+    }
   }
 
   delete_mmap_entry(mapping);
