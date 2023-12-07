@@ -155,9 +155,7 @@ static void *validate_buffer(void *ptr, unsigned size) {
 
 /* Validates a string, checking every character. */
 static char *validate_string(char *ptr) {
-  while (safe_get(ptr++) != '\0') { 
-    PUTBUF("safe get");
-  }
+  while (safe_get(ptr++) != '\0') { }
   return ptr;
 }
 
@@ -241,12 +239,14 @@ static void syscall_remove(struct intr_frame *f) {
   validate_string(file_name);
   
   bool success = false;
+
   struct file_info *info = file_info_lookup((char *) file_name);
   if (info == NULL) {
     goto ret;
   }
 
   info->should_remove = true;
+  success = true;
   
   /* Check if any thread has the file open, if so, should_remove is set true
      and every time the file is closed, the size needs to be rechecked to 
@@ -367,16 +367,12 @@ static void syscall_write(struct intr_frame *f) {
   unsigned size = pop_arg(2, unsigned);
   validate_buffer(buffer, size);
 
-  if (size == 0) {
-    f->eax = 0;
-    return;
-  }
-
   if (fd == STDOUT_FILENO) {
     putbuf((const char *) buffer, size);
     f->eax = size;
     return;
   } 
+
   struct fd *fd_ = fd_lookup_safe(fd);
 
   lock_acquire(&filesys_lock);
