@@ -28,6 +28,7 @@ static struct frame *frame_at_clock;
 static struct frame *choose_frame(void);
 static struct frame *frame_get_at(int index);
 bool frame_is_accessed(struct frame *frame);
+void set_accessed_false(frame);
 struct shared_file *get_shared_file(struct frame *frame);
 void remove_vpage(struct frame *frame);
 
@@ -188,11 +189,18 @@ bool frame_is_accessed(struct frame *frame) {
   for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
       struct vpage *vpage = list_entry (e, struct vpage, elem);
     if (pagedir_is_accessed(frame->t->pagedir, vpage->vaddr)) {
-      pagedir_set_accessed(frame->t->pagedir, vpage->vaddr, false);
+      set_accessed_false(frame);
       return true;
     }
   }
   return false;
+}
+
+void set_accessed_false(struct frame *frame) {
+  for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
+    struct vpage *vpage = list_entry (e, struct vpage, elem);
+    pagedir_set_accessed(frame->t->pagedir, vpage->vaddr, false);
+  }
 }
 
 void frame_free(struct frame *frame) {
