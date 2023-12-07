@@ -13,6 +13,8 @@ struct frame {
     size_t swap_slot;
     bool swapped;
 
+    bool is_pinned
+
     struct hash_elem elem;
 };
 
