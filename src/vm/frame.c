@@ -113,7 +113,6 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   list_init(&(frame->vpages));
   frame->kaddr = kaddr;
   frame->swapped = false;
-  frame->is_pinned = false;
 
   ASSERT(hash_insert(&frame_table, &frame->elem) == NULL);
 
@@ -163,7 +162,7 @@ static struct frame *choose_frame(void) {
     for (struct hash_elem *h = start_elem; h != NULL; h = hash_next(&i)) {
       struct frame *f = hash_entry(h, struct frame, elem);
       f->t = thread_current();
-      if (!frame->is_pinned && !frame_is_accessed(f)) {
+      if (!frame_is_accessed(f)) {
         if (list_size(&(f->vpages)) == 1) {
           // dirty case will not be for shared files so we know vpage size is 1
           struct vpage *vpage = list_entry(list_front(&(f->vpages)), struct vpage, elem);
