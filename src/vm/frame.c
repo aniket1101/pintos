@@ -20,7 +20,7 @@ static int clock_hand;
 static struct frame *frame_at_clock;
 
 static struct frame *choose_frame(void);
-static struct frame *choose_frame_lru(void);
+static struct frame *choose_frame_lru(void) UNUSED;
 static struct frame *frame_get_at(int index);
 
 void frame_table_init(void) {
