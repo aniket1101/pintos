@@ -69,6 +69,7 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   frame->t = thread_current();
   frame->vaddr = vaddr;
   frame->kaddr = kaddr;
+  frame->swapped = false;
 
   ASSERT(hash_insert(&frame_table, &frame->elem) == NULL);
 
@@ -130,7 +131,8 @@ static struct frame *choose_frame(void) {
       struct frame *f = hash_entry(h, struct frame, elem);
       if (!pagedir_is_accessed(f->t->pagedir, f->vaddr)) {
         if (pagedir_is_dirty(f->t->pagedir, f->vaddr)) {
-          swap_out(f->vaddr);
+          f->swap_slot = swap_out(f->vaddr);
+          f->swapped = true;
         }
 
         clock_hand++;
@@ -178,7 +180,11 @@ void frame_destroy(void *kaddr) {
         && !frame_less(&frame_at_clock->elem, &frame->elem, NULL)) {
       frame_at_clock = frame_get_at(clock_hand--);
     }
-
+    
+    if (frame->swapped) {
+      swap_drop(frame->swap_slot);
+    }
+    
     frame_free(frame);
   }
 
