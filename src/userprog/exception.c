@@ -163,7 +163,7 @@ page_fault (struct intr_frame *f)
    /* If user access has faulted, kill user process. */ 
    if (!is_user_vaddr(fault_addr) || fault_addr == NULL || !not_present) {
       PUTBUF("User access faulted: exit(-1)");
-      kernel_exit(-1);
+      exit_process(-1);
    }
 
 	/* Round the fault address down to a page boundary. */
@@ -181,7 +181,7 @@ page_fault (struct intr_frame *f)
          PUTBUF_FORMAT("Supp page not found with vaddr = %p. Do not grow stack: exit(-1)", vaddr);
          f->eip = (void (*) (void)) f->eax;
          f->eax = 0xffffffff;
-         kernel_exit(-1);
+         exit_process(-1);
 		}
    }
 

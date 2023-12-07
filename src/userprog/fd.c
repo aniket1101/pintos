@@ -69,13 +69,13 @@ struct fd *fd_lookup(int fd) {
   return found_elem != NULL ? hash_entry (found_elem, struct fd, elem) : NULL; 
 } 
 
-/* Search for fd. Call kernel_exit(-1) if lookup fails. */
+/* Search for fd. Call exit_process(-1) if lookup fails. */
 struct fd *fd_lookup_safe(int fd) {
   struct fd *fd_ = fd_lookup(fd);
   
   // If lookup fails, exit
   if (fd_ == NULL) { 
-    kernel_exit(-1);
+    exit_process(-1);
   }
 
   return fd_;

@@ -36,7 +36,7 @@ static bool pc_link_less(const struct hash_elem *a,
 struct pc_link *pc_link_init(tid_t child_tid) {
   struct pc_link *link = (struct pc_link *) malloc (sizeof(struct pc_link));
   if (link == NULL) { // If malloc fails, exit
-    kernel_exit(-1);
+    exit_process(-1);
   }
 
   // Intialise members
