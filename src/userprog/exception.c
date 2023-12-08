@@ -201,6 +201,10 @@ page_fault (struct intr_frame *f)
             break;
 
          case FILE:
+            // Checks we don't go over the stack limit
+            if (vaddr > PHYS_BASE - STACK_LIMIT) {
+               exception_exit(f);
+            }
             if (frame == NULL) { 
                /* If there page is writable, we get a new frame. If it's read
                only, try to share it */
