@@ -20,13 +20,13 @@
 #include <string.h>
 #include "debug.h"
 
-#define STACK_LIMIT (8 * (1 << 20))
+#define STACK_LIMIT (8 << 20)
 #define PUSHA_OVERFLOW 32
 #define PUSH_OVERFLOW 4
 #define EAX_ERR 0xffffffff
 
 static void exception_exit(struct intr_frame *f) NO_RETURN;
-static bool should_grow_stack(void *fault_addr, bool user, struct intr_frame *f, struct thread *t);
+static bool should_grow_stack(void *fault_addr, void *vaddr, void *esp);
 
 /* Number of page faults processed. */
 static long long page_fault_cnt;
@@ -176,8 +176,10 @@ page_fault (struct intr_frame *f)
       user ? "user" : "kernel");
 
    if ((is_kernel_vaddr(fault_addr) && write) || !not_present) {
+      PUTBUF("Kernel addr write or read violation: exit(-1)");
       exception_exit(f);
    }
+   
 
    /* Round the fault address down to a page boundary. */
    void *vaddr = pg_round_down(fault_addr);
@@ -233,13 +235,14 @@ page_fault (struct intr_frame *f)
             NOT_REACHED();
       }
       return;
-   } else if (should_grow_stack(fault_addr, user, f, t)) {
+   } else if (should_grow_stack(fault_addr, vaddr, (user ? f->esp : t->esp))) {
       struct frame *frame = frame_put(vaddr, PAL_USER | PAL_ZERO);
       ASSERT(frame != NULL);
       ASSERT(install_page (vaddr, frame->kaddr, true));
       return;
    } 
 
+   PUTBUF("Unhandled page fault: exit(-1)");
    exception_exit(f);
 }
 
@@ -249,9 +252,9 @@ static void exception_exit(struct intr_frame *f) {
    exit_process(-1);
 }
 
-static bool should_grow_stack(void *fault_addr, bool user, struct intr_frame *f, struct thread *t) {
-   if (PHYS_BASE - fault_addr < STACK_LIMIT) {
-      uint32_t diff = (user ? f->esp : t->esp) - fault_addr;
+static bool should_grow_stack(void *fault_addr, void *vaddr, void *esp) {
+   if (PHYS_BASE - vaddr <= STACK_LIMIT) {
+      uint32_t diff = esp - fault_addr;
       return diff == 0 || diff == PUSH_OVERFLOW || diff == PUSHA_OVERFLOW;
    }
 
