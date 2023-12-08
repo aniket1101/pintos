@@ -30,7 +30,6 @@
 #define THREAD_MAGIC 0xcd6abf4b
 
 // Clamp a value between its minimum and maximum
-#define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
 #define CLAMP_PRI(val) (CLAMP(val, PRI_MIN, PRI_MAX)) // Clamp a priority
 
 /* List of processes in THREAD_READY state, that is, processes

@@ -492,7 +492,7 @@ static void syscall_mmap(struct intr_frame *f) {
       /* Calculate how to fill this page.
          We will read PAGE_READ_BYTES bytes from FILE
          and zero the final PAGE_ZERO_BYTES bytes. */
-      size_t page_read_bytes = CLAMP(read_bytes, 0, PGSIZE);
+      size_t page_read_bytes = CLAMP((int) read_bytes, 0, PGSIZE);
       
       /* Check if virtual page already allocated */
       supp_page_put(addr, FILE, file, offset, true, page_read_bytes);

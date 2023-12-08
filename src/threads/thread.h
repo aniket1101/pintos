@@ -8,6 +8,7 @@
 #include "fixed-point.h"
 
 #define MAX(a, b) ((a > b) ? a : b)
+#define CLAMP(val, min, max) (val < min ? min : (val > max ? max : val))
 
 // Converts list_elem to thread
 #define ELEM_TO_THREAD(thr) (list_entry(thr, struct thread, elem))
