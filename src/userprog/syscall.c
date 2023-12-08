@@ -334,6 +334,7 @@ static void syscall_filesize(struct intr_frame *f) {
   lock_release(&filesys_lock);
 }
 
+// Implements the read syscall
 static void syscall_read(struct intr_frame *f) {
   int fd = pop_arg(0, int);
   void *buffer = pop_arg(1, void *);
@@ -366,6 +367,7 @@ static void syscall_read(struct intr_frame *f) {
   lock_release(&filesys_lock);
 }
 
+// Implements the write syscall
 static void syscall_write(struct intr_frame *f) {
   int fd = pop_arg(0, int);
   void *buffer = pop_arg(1, void *);
@@ -453,6 +455,11 @@ static void syscall_close(struct intr_frame *f) {
   }
 }
 
+/* Executes mmap syscall by:
+   - Getting the fd of the file,
+   - Reopening the file
+   - Adding every page of the file to the supplemental page table 
+   - Add one mmap entry about the file to the mmap table */
 static void syscall_mmap(struct intr_frame *f) {
   int fd_num = pop_arg(0, int);
   void *addr = pop_arg(1, void *);
@@ -507,11 +514,14 @@ static void syscall_mmap(struct intr_frame *f) {
   add_mmap_entry(temp_addr, page_cnt);
 }
 
+// Performs the munmap system call by removing the mmap entry of the file
 static void syscall_munmap(struct intr_frame *f) {
   int mapping = pop_arg(0, mapid_t);
   delete_mmap_entry(mapping);
 }
 
+/* Checks validity of the mapping by looking at whether every page is free in
+the given range */
 static bool check_mapping(void *start, void *end) {
   ASSERT(start < end);
   for(; start <= end; start += PGSIZE) {

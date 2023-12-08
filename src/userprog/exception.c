@@ -187,7 +187,11 @@ page_fault (struct intr_frame *f)
    /* Get the relevant page from this thread's page table. */
    struct supp_page *page = supp_page_lookup(vaddr);
    
+   /* Check if there's a supplementary page table entry (i.e fault was caused)
+   by accessing something that's not in the frame table */
    if (page != NULL) {
+
+      /* Get (if it exists) the frame that the virtual address maps to */
       struct frame *frame = frame_lookup(vaddr);
       
       switch(page->status) {                                                    
@@ -197,26 +201,33 @@ page_fault (struct intr_frame *f)
             break;
 
          case FILE:
-            if (frame == NULL) { // Frame is NULL so allocate
+            if (frame == NULL) { 
+               /* If there page is writable, we get a new frame. If it's read
+               only, try to share it */
                frame = page->writable ? frame_put(vaddr, PAL_USER) : 
-                  frame_put_file(vaddr, PAL_USER, page->file, page->file_offset);
+                 frame_put_file(vaddr, PAL_USER, page->file, page->file_offset);
                
                ASSERT(frame != NULL);
                ASSERT(install_page(vaddr, frame->kaddr, page->writable));
                ASSERT(page->file != NULL);
                
+               /* Get the offset of the file before we add data from the file */
                off_t original_pos = file_tell(page->file);
                file_seek(page->file, page->file_offset);
 
-               // lock_filesys_access();
-               off_t bytes_read = file_read(page->file, frame->kaddr, page->read_bytes);
-               // unlock_filesys_access();
-               ASSERT(page->read_bytes == 0 || bytes_read == (int) page->read_bytes);
+               /* Reads file data into the physical address */
+               off_t bytes_read 
+                  = file_read(page->file, frame->kaddr, page->read_bytes);
 
+               ASSERT(page->read_bytes == 0 || 
+                      bytes_read == (int) page->read_bytes);
+               // Returns offset to the original before we moved it to add data
                file_seek(page->file, original_pos);
-
+               // Pad the rest of the page with zeros
                memset (frame->kaddr + page->read_bytes, 0 , page->zero_bytes);
-            } else if (page->writable && !pagedir_is_writable(t->pagedir, vaddr)) {
+            } 
+            else if(page->writable && !pagedir_is_writable(t->pagedir, vaddr)) {
+               // Updates that the page is writable in the page directory
                pagedir_set_writable(t->pagedir, vaddr, page->writable);
             }
 
@@ -228,6 +239,7 @@ page_fault (struct intr_frame *f)
       }
       return;
    } else if (should_grow_stack(fault_addr, vaddr, (user ? f->esp : t->esp))) {
+      // If we need to grow the stack, get a free frame for the new data
       struct frame *frame = frame_put(vaddr, PAL_USER | PAL_ZERO);
       ASSERT(frame != NULL);
       ASSERT(install_page (vaddr, frame->kaddr, true));
@@ -238,12 +250,14 @@ page_fault (struct intr_frame *f)
    exception_exit(f);
 }
 
+// Sets registers to the right values after a page fault
 static void exception_exit(struct intr_frame *f) {
    f->eip = (void (*) (void)) f->eax;
    f->eax = EAX_ERR;
    exit_process(-1);
 }
 
+// Checks whether we need to grow the stack
 static bool should_grow_stack(void *fault_addr, void *vaddr, void *esp) {
    if (PHYS_BASE - vaddr <= STACK_LIMIT) {
       uint32_t diff = esp - fault_addr;

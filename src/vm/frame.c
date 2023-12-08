@@ -22,6 +22,7 @@ static hash_hash_func frame_thread_hash;
 static hash_less_func frame_thread_less;
 static hash_action_func frame_thread_destroy;
 
+/* Locks used by the hash tables */
 static struct hash frame_table;
 static struct hash shared_files;
 static struct lock frame_lock;
@@ -37,6 +38,7 @@ void set_accessed_false(struct frame *frame);
 void remove_thread(struct frame *frame);
 struct shared_file *get_shared_file(struct frame *frame);
 
+/* Initialises the frame table, as well as the locks needed for synchronising */
 void frame_table_init(void) {
   hash_init(&frame_table, &frame_hash, &frame_less, NULL);
   lock_init(&frame_lock);
@@ -45,28 +47,35 @@ void frame_table_init(void) {
   hash_init(&shared_files, &file_hash_hash, &file_less, NULL);
 }
 
+/* Function used to hash a hash_elem, by hashing the physical address */
 static unsigned frame_hash(const struct hash_elem *e, void *aux UNUSED) {
   struct frame *frame = hash_entry(e, struct frame, elem);
   return hash_int((uint32_t) frame->kaddr);
 }
 
+/* Compares two hash_elems by comparing their physical addresses */
 static bool frame_less(const struct hash_elem *a, 
     const struct hash_elem *b, void *aux UNUSED) {
   return hash_entry(a, struct frame, elem)->kaddr
       < hash_entry(b, struct frame, elem)->kaddr;
 }
 
+/* Hashes a shared file by taking into the account the inode and the offset */
 static unsigned file_hash_hash(const struct hash_elem *e, void *aux UNUSED) {
   struct shared_file *shared_file = hash_entry(e, struct shared_file, elem);
   return (file_hash(shared_file->file) * shared_file->offset);
 }
 
+/* Compares two files by comparing their hashes */
 static bool file_less(const struct hash_elem *a, 
-    const struct hash_elem *b, void *aux) {
+  const struct hash_elem *b, void *aux) {
   return file_hash_hash(a, aux) < file_hash_hash(b, aux);
 }
 
-struct frame *frame_put_file(void *vaddr, enum palloc_flags flag, struct file *file, int offset) {
+/* Adds a shared file to the hash table of shared files */
+struct frame *frame_put_file(void *vaddr, enum palloc_flags flag, 
+                             struct file *file, int offset) {
+
   struct shared_file s_file;
   s_file.file = file;
   s_file.offset = offset;
@@ -74,7 +83,8 @@ struct frame *frame_put_file(void *vaddr, enum palloc_flags flag, struct file *f
   struct frame *frame;
   if (elem == NULL) {
     // Shared file is not in a frame yet
-    struct shared_file *shared_file = (struct shared_file *) malloc (sizeof (struct shared_file));
+    struct shared_file *shared_file 
+      = (struct shared_file *) malloc (sizeof (struct shared_file));
     frame = frame_put(vaddr, flag);
     shared_file->frame = frame;
     shared_file->file = file;
@@ -83,7 +93,8 @@ struct frame *frame_put_file(void *vaddr, enum palloc_flags flag, struct file *f
   } else {
     // Shared file is in frame
     frame = hash_entry(elem, struct shared_file, elem)->frame;
-    struct frame_thread *frame_thread = (struct frame_thread *) malloc (sizeof (struct frame_thread));
+    struct frame_thread *frame_thread 
+      = (struct frame_thread *) malloc (sizeof (struct frame_thread));
     frame_thread->t = thread_current();
     install_page(frame->vaddr, frame->kaddr, false);
     hash_insert(&(frame->threads), &(frame_thread->elem));
@@ -125,7 +136,8 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   frame->vaddr = vaddr;
   frame->kaddr = kaddr;
 
-  struct frame_thread *frame_thread = (struct frame_thread *) malloc (sizeof (struct frame_thread));
+  struct frame_thread *frame_thread 
+    = (struct frame_thread *) malloc (sizeof (struct frame_thread));
   frame_thread->t = thread_current();
   hash_insert(&(frame->threads), &(frame_thread->elem));
   ASSERT(hash_insert(&frame_table, &frame->elem) == NULL);
@@ -135,21 +147,24 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
     return frame;
 }
 
+/* Returns the frame with the given physical address */
 struct frame *frame_kaddr_lookup(void *kaddr) {
     // // Find frame with virtual address vaddr
     struct frame frame = {.kaddr = kaddr}; // Fake element to search for
-    struct hash_elem *found_elem = hash_find (&frame_table, &frame.elem);
+    struct hash_elem *f_elem = hash_find (&frame_table, &frame.elem);
 
     // Return frame or NULL if no frame found
-    return found_elem == NULL ? NULL : hash_entry(found_elem, struct frame, elem);
+    return f_elem == NULL ? NULL : hash_entry(f_elem, struct frame, elem);
 }
 
+/* Returns the frame with the given virtual address */
 struct frame *frame_lookup(void *vaddr) {
   // // Find frame with kernel address kaddr
   void *kaddr = pagedir_get_page(thread_current()->pagedir, vaddr);
   return kaddr == NULL ? NULL : frame_kaddr_lookup(kaddr);
 }
 
+/* Evicts a frame chosen by the clock eviction algorithm */
 void evict_frame(void) {
   struct frame *to_evict = choose_frame();
   ASSERT (to_evict != NULL);
@@ -167,13 +182,15 @@ static struct frame *choose_frame(void) {
   struct hash_iterator i;  
   hash_first (&i, &frame_table);
   
-  //Set current element to clock hand
+  // Set current element to clock hand
   struct hash_elem *start_elem = NULL;
   for (int index = 0; index <= clock_hand; index++) {
     start_elem = hash_next (&i);
   }
   
   ASSERT(start_elem != NULL);
+
+  /* Loops until it finds the right frame */
   while (true) {
     for (struct hash_elem *h = start_elem; h != NULL; h = hash_next(&i)) {
       struct frame *f = hash_entry(h, struct frame, elem);
@@ -199,6 +216,7 @@ static struct frame *choose_frame(void) {
   }
 }
 
+/* Checks if the frame is accessed and sets it to false if it is */
 bool frame_is_accessed(struct frame *frame) {
   // Called from choose frame so frame lock is acquired
   if (!hash_empty(&(frame->threads))) {
@@ -206,7 +224,8 @@ bool frame_is_accessed(struct frame *frame) {
     hash_first (&i, &(frame->threads));
 
     while (hash_next (&i)) { // Loop through the hash
-      struct frame_thread *frame_thread = hash_entry (hash_cur (&i), struct frame_thread, elem);
+      struct frame_thread *frame_thread 
+        = hash_entry (hash_cur (&i), struct frame_thread, elem);
       if (pagedir_is_accessed(frame_thread->t->pagedir, frame->vaddr)) {
         set_accessed_false(frame);
         return true;
@@ -216,6 +235,7 @@ bool frame_is_accessed(struct frame *frame) {
   return false;
 }
 
+/* Sets acessed to false for a specific frame */
 void set_accessed_false(struct frame *frame) {
   // Called from choose frame so frame lock is acquired
     if (!hash_empty(&(frame->threads))) {
@@ -229,6 +249,7 @@ void set_accessed_false(struct frame *frame) {
   }
 }
 
+/* Frees a specific frame */
 void frame_free(struct frame *frame) {
   ASSERT(frame != NULL);
   if (hash_size(&(frame->threads)) == 1 && get_shared_file(frame) == NULL) {
@@ -253,6 +274,7 @@ void frame_free(struct frame *frame) {
   free(frame);
 }
 
+/* Gets a specific shared file */
 struct shared_file *get_shared_file(struct frame *frame) {
   lock_acquire(&shared_file_lock);
   if (!hash_empty(&shared_files)) {
@@ -272,6 +294,7 @@ struct shared_file *get_shared_file(struct frame *frame) {
   return NULL;
 }
 
+/* Gets the frame at the specific index in the hash table */
 static struct frame *frame_get_at(int index) {
   lock_acquire(&frame_lock);  
   struct hash_iterator iter;
@@ -287,6 +310,8 @@ static struct frame *frame_get_at(int index) {
   return frame;
 }
 
+/* Frees a frame with the specific physical address and updates the
+   clock hand accordingly */
 void frame_destroy(void *kaddr) {
   lock_acquire(&frame_lock);
   struct frame *frame = frame_kaddr_lookup(kaddr);
@@ -305,10 +330,12 @@ void frame_destroy(void *kaddr) {
   lock_release(&frame_lock);
 } 
 
+/* Frees a specific hash elem */
 void frame_thread_destroy (struct hash_elem *e, void *aux UNUSED) {
   free(hash_entry(e, struct frame_thread, elem));
 }
 
+/* Deletes the thread from the hash of threads*/
 void remove_thread(struct frame *frame) {
   struct frame_thread ft;
   ft.t = thread_current();
@@ -318,10 +345,12 @@ void remove_thread(struct frame *frame) {
   }
 }
 
+/* Hashes a hash_elem by the thread's tid */
 static unsigned frame_thread_hash(const struct hash_elem *e, void *aux UNUSED) {
   return hash_int(hash_entry(e, struct frame_thread, elem)->t->tid);
 }
 
+/* Compares two hash_elems by comparing their hashed value */
 static bool frame_thread_less(const struct hash_elem *a, 
     const struct hash_elem *b, void *aux) {
   return frame_thread_hash(a, aux) < frame_thread_hash(b, aux);

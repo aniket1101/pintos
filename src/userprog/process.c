@@ -571,13 +571,12 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
-      /* Calculate how to fill this page.
-         We will read PAGE_READ_BYTES bytes from FILE
-         and zero the final PAGE_ZERO_BYTES bytes. */
+      // Calculates how many bytes we will read this page
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      // Calculates how many zero bytes we will add a the end of this page
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
-      /* Check if virtual page already allocated */
+      /* Add page to the supplemental page table */
       supp_page_put(upage, FILE, file, ofs, writable, page_read_bytes);
  
       /* Advance. */
@@ -596,10 +595,10 @@ setup_stack (void **esp)
 {
   bool success = false;
 
-  // Need to take into account the zeroed
   struct frame *frame = frame_put(PHYS_BASE - PGSIZE, PAL_USER | PAL_ZERO);
   if (frame != NULL) {
-    success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, frame->kaddr, true);
+    success 
+      = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, frame->kaddr, true);
     if (success) {
       *esp = PHYS_BASE;
     } else {  
