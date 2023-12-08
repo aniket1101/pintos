@@ -358,7 +358,6 @@ static void syscall_read(struct intr_frame *f) {
 
   lock_acquire(&filesys_lock);
 
-  uint8_t temp_buf[size];
   // Updates postion of file to the threads saved position
   file_seek(fd_->file_info->file, fd_->pos);
   f->eax = file_read(fd_->file_info->file, buffer, size);
