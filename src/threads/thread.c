@@ -321,6 +321,7 @@ thread_create (const char *name, int priority,
       mmap_init(&t->mmap_table);
       t->map_id = 0;
     }
+    t->esp = NULL;
   #endif
 
   try_yield();  
