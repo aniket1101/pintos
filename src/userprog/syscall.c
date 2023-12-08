@@ -148,9 +148,11 @@ static void safe_put(void *ptr, uint8_t byte) {
 /* Validates a buffer, checking every page. */
 static void *validate_buffer(void *ptr, unsigned size) {
   safe_get(ptr);
+  safe_put(ptr, *((uint8_t *) ptr));
 
   while (size >= PGSIZE) {
     safe_get(ptr = pg_round_up(ptr));
+    safe_put(ptr, *((uint8_t *) ptr));
     size -= PGSIZE - pg_ofs(ptr);
     ptr++;
   }
@@ -359,14 +361,10 @@ static void syscall_read(struct intr_frame *f) {
   uint8_t temp_buf[size];
   // Updates postion of file to the threads saved position
   file_seek(fd_->file_info->file, fd_->pos);
-  f->eax = file_read(fd_->file_info->file, temp_buf, size);
+  f->eax = file_read(fd_->file_info->file, buffer, size);
   fd_->pos += f->eax; // Updates saved position
   
   lock_release(&filesys_lock);
-
-  for (unsigned i = 0; i < size; i++) {
-    safe_put(buffer++, temp_buf[i]);
-  }
 }
 
 static void syscall_write(struct intr_frame *f) {
