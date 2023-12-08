@@ -348,21 +348,25 @@ static void syscall_read(struct intr_frame *f) {
       safe_put(buffer++, input_getc());
     }
 
-    f->eax = size; 
+    f->eax = size;
     return;
-  }
+  } 
 
   struct fd *fd_ = fd_lookup_safe(fd);
 
   lock_acquire(&filesys_lock);
 
+  uint8_t temp_buf[size];
   // Updates postion of file to the threads saved position
   file_seek(fd_->file_info->file, fd_->pos);
-  int bytes_read = file_read(fd_->file_info->file, buffer, size);
-  fd_->pos += bytes_read; // Updates saved position
-
+  f->eax = file_read(fd_->file_info->file, temp_buf, size);
+  fd_->pos += f->eax; // Updates saved position
+  
   lock_release(&filesys_lock);
-  f->eax = bytes_read;
+
+  for (unsigned i = 0; i < size; i++) {
+    safe_put(buffer++, temp_buf[i]);
+  }
 }
 
 static void syscall_write(struct intr_frame *f) {
