@@ -6,8 +6,8 @@
 
 void syscall_init (void);
 void exit_process(int status) NO_RETURN; 
-void munmap_all(void);
 
+void *validate_get_buffer(void *ptr, unsigned);
 void lock_filesys_access(void);
 void unlock_filesys_access(void);
 

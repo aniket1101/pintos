@@ -3,7 +3,8 @@
 #include "threads/vaddr.h"
 #include "filesys/file.h"
 #include "userprog/debug.h"
-
+#include "vm/frame.h"
+#include "vm/page.h"
 
 static hash_hash_func mmap_entry_hash;
 static hash_less_func mmap_entry_less;
@@ -38,6 +39,7 @@ bool add_mmap_entry(void *start_page, int page_cnt) {
   if (map_entry == NULL) {
       return false;
   }
+
   map_entry->map_id = thread_current()->map_id;
   map_entry->start_page = start_page;
   map_entry->page_count = page_cnt;
@@ -76,6 +78,14 @@ void free_mmap_entry(struct mmap_entry *entry) {
   for (void *curr = entry->start_page; 
       curr < entry->start_page + (entry->page_count * PGSIZE);
       curr += PGSIZE) {
+      
+    /* file system, write bsck, free frsme, remove from psge dir and suppl page table*/
+    if (page->file != NULL) {
+      validate_get_buffer(curr, PGSIZE);
+      file_write_at(page->file, curr, PGSIZE, curr - entry->start_page);
+    }
+
+    frame_free(frame_lookup(curr));
     supp_page_remove(curr);
   }
   
@@ -90,7 +100,9 @@ static void mmap_entry_destroy(struct hash_elem *h_elem, void *aux UNUSED) {
 
 /* Destroys the entire table of the thread */
 void mmap_destroy(void) {
-  hash_destroy(&thread_current()->mmap_table, &mmap_entry_destroy);
+  if (!hash_empty(&thread_current()->mmap_table)) {
+    hash_destroy(&thread_current()->mmap_table, &mmap_entry_destroy);
+  }
 }
 
 /* Returns true iff a given address is mapped to a file in the current

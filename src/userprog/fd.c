@@ -97,5 +97,7 @@ static void fd_free(struct hash_elem *h_elem, void *aux UNUSED) {
 
 /* Destroy current thread's hash table, freeing each fd. */
 void fd_hash_destroy(void) {
-  hash_destroy(&thread_current()->fds, &fd_free);
+  if (!hash_empty(&thread_current()->fds)) {
+    hash_destroy(&thread_current()->fds, &fd_free);
+  }
 }

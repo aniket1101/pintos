@@ -212,7 +212,7 @@ page_fault (struct intr_frame *f)
                  frame_put_file(vaddr, PAL_USER, page->file, page->file_offset);
                
                ASSERT(frame != NULL);
-               ASSERT(install_page(vaddr, frame->kaddr, page->writable));
+               install_page(vaddr, frame->kaddr, page->writable);
                ASSERT(page->file != NULL);
                
                /* Get the offset of the file before we add data from the file */
@@ -246,7 +246,7 @@ page_fault (struct intr_frame *f)
       // If we need to grow the stack, get a free frame for the new data
       struct frame *frame = frame_put(vaddr, PAL_USER | PAL_ZERO);
       ASSERT(frame != NULL);
-      ASSERT(install_page (vaddr, frame->kaddr, true));
+      install_page (vaddr, frame->kaddr, true);
       return;
    } 
 

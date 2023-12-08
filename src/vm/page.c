@@ -123,7 +123,7 @@ static void supp_page_free(struct hash_elem *elem, void *aux UNUSED) {
 		lock_filesys_access();
 		file_write_at(page->file, kpage ,page->read_bytes, page->file_offset);
 		unlock_filesys_access();
-		palloc_free_page(kpage);
+		// palloc_free_page(kpage);
 	  }
 	}
 	free(page);
@@ -131,7 +131,7 @@ static void supp_page_free(struct hash_elem *elem, void *aux UNUSED) {
 
 /* Destroy thread t's supp_page hash table, freeing each entry. */
 void supp_page_table_destroy(struct thread *t) {
-	lock_acquire(&supp_page_table_lock);
-	hash_destroy(&t->supp_page_table, &supp_page_free);
-	lock_release(&supp_page_table_lock);
+	if (!hash_empty(&t->supp_page_table)) {
+		hash_destroy(&t->supp_page_table, &supp_page_free);
+	}
 }

@@ -140,6 +140,7 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
     = (struct frame_thread *) malloc (sizeof (struct frame_thread));
   frame_thread->t = thread_current();
   hash_insert(&(frame->threads), &(frame_thread->elem));
+  
   ASSERT(hash_insert(&frame_table, &frame->elem) == NULL);
 
   ret: 
@@ -251,7 +252,10 @@ void set_accessed_false(struct frame *frame) {
 
 /* Frees a specific frame */
 void frame_free(struct frame *frame) {
-  ASSERT(frame != NULL);
+  if (frame == NULL) {
+    return;
+  }
+
   if (hash_size(&(frame->threads)) == 1 && get_shared_file(frame) == NULL) {
     // thread_current is the only thread in the frame
     struct supp_page *page = supp_page_lookup(frame->vaddr);
@@ -260,7 +264,9 @@ void frame_free(struct frame *frame) {
     }
   }
 
-  hash_destroy(&(frame->threads), &frame_thread_destroy);
+  if (!hash_empty(&frame->threads)) {
+    hash_destroy(&(frame->threads), &frame_thread_destroy);
+  }
 
   struct shared_file *shared_file = get_shared_file(frame);
   if (shared_file != NULL) {
@@ -269,6 +275,7 @@ void frame_free(struct frame *frame) {
     lock_release(&shared_file_lock);
     free(shared_file);
   }
+
   ASSERT(hash_delete(&frame_table, &frame->elem) != NULL);
   palloc_free_page(frame->kaddr);
   free(frame);

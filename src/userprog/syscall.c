@@ -26,7 +26,7 @@
 #define arg_offs(arg_num, esp) (esp + ((arg_num + 1) * WORD_SIZE))
 
 // Pop argument with number argnum off the stack (ptr arguments need additional check)
-#define pop(esp, type) *((type *) validate_buffer(esp, sizeof(type)))
+#define pop(esp, type) *((type *) validate_get_buffer(esp, sizeof(type)))
 #define pop_arg(argnum, type) pop(arg_offs(argnum, f->esp), type) 
 
 #define NUM_SYSCALLS 15
@@ -76,7 +76,7 @@ syscall_func *handlers[NUM_SYSCALLS] = {
 
 static uint8_t safe_get(void *ptr);
 static void safe_put(void *ptr, uint8_t byte);
-static void *validate_buffer(void *ptr, unsigned size);
+static void *validate_put_buffer(void *ptr, unsigned size);
 static char *validate_string(char *ptr);
 
 static bool check_mapping(void *start, void *end);
@@ -146,12 +146,23 @@ static void safe_put(void *ptr, uint8_t byte) {
 }
 
 /* Validates a buffer, checking every page. */
-static void *validate_buffer(void *ptr, unsigned size) {
+void *validate_get_buffer(void *ptr, unsigned size) {
   safe_get(ptr);
-  safe_put(ptr, *((uint8_t *) ptr));
 
   while (size >= PGSIZE) {
     safe_get(ptr = pg_round_up(ptr));
+    size -= PGSIZE - pg_ofs(ptr);
+    ptr++;
+  }
+
+  return ptr;
+}
+
+/* Validates a buffer, checking every page. */
+static void *validate_put_buffer(void *ptr, unsigned size) {
+  safe_put(ptr, *((uint8_t *) ptr));
+
+  while (size >= PGSIZE) {
     safe_put(ptr, *((uint8_t *) ptr));
     size -= PGSIZE - pg_ofs(ptr);
     ptr++;
@@ -339,7 +350,7 @@ static void syscall_read(struct intr_frame *f) {
   int fd = pop_arg(0, int);
   void *buffer = pop_arg(1, void *);
   unsigned size = pop_arg(2, unsigned);
-  validate_buffer(buffer, size);
+  validate_put_buffer(buffer, size);
   
   if (size == 0) {
     f->eax = 0;
@@ -372,7 +383,7 @@ static void syscall_write(struct intr_frame *f) {
   int fd = pop_arg(0, int);
   void *buffer = pop_arg(1, void *);
   unsigned size = pop_arg(2, unsigned);
-  validate_buffer(buffer, size);
+  validate_get_buffer(buffer, size);
 
   if (fd == STDOUT_FILENO) {
     putbuf((const char *) buffer, size);
