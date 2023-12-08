@@ -148,9 +148,11 @@ static void safe_put(void *ptr, uint8_t byte) {
 /* Validates a buffer, checking every page. */
 static void *validate_buffer(void *ptr, unsigned size) {
   safe_get(ptr);
+  safe_put(ptr, *((uint8_t *) ptr));
 
   while (size >= PGSIZE) {
     safe_get(ptr = pg_round_up(ptr));
+    safe_put(ptr, *((uint8_t *) ptr));
     size -= PGSIZE - pg_ofs(ptr);
     ptr++;
   }
@@ -456,7 +458,7 @@ static void syscall_close(struct intr_frame *f) {
 static void syscall_mmap(struct intr_frame *f) {
   int fd_num = pop_arg(0, int);
   void *addr = pop_arg(1, void *);
-
+  // validate_buffer(addr, 8);
   struct fd *fd = fd_lookup_safe(fd_num);
 
   mapid_t map_id = -1;
@@ -481,49 +483,46 @@ static void syscall_mmap(struct intr_frame *f) {
   file = file_reopen(file);
   lock_release(&filesys_lock);
 
-  uint32_t offset;
-  int page_cnt;
+  int page_cnt = 0;
 
-  for (offset = 0; offset < read_bytes; offset += PGSIZE){
-      if (!is_user_vaddr (addr + offset) ||
-          pagedir_get_page (thread_current()->pagedir, addr + offset) ||
-          is_mapped (addr + offset)) {
-        goto ret;
-      }
-
-      ++page_cnt;
-  }
-
+  off_t offset = 0;
   void *temp_addr = addr;
-  while (read_bytes > 0) {
-    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-
-    supp_page_put(addr, FILE, file, 0, true, page_read_bytes);
+  file_seek (file, offset);
+  while (read_bytes > 0) 
+    {
+      /* Calculate how to fill this page.
+         We will read PAGE_READ_BYTES bytes from FILE
+         and zero the final PAGE_ZERO_BYTES bytes. */
+      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       
-    read_bytes -= page_read_bytes;
-    addr += PGSIZE;
-  }
+      /* Check if virtual page already allocated */
+      supp_page_put(addr, FILE, file, offset, true, page_read_bytes);
+ 
+      /* Advance. */
+      read_bytes -= page_read_bytes;
+      addr += PGSIZE;
+      offset += PGSIZE;
+      page_cnt++;
+    }
  
   add_mmap_entry(temp_addr, page_cnt);
-  
+
   ret:
     f->eax = map_id;
 }
 
-static void syscall_munmap(struct intr_frame *f) {
-  int mapping = pop_arg(0, mapid_t);
-
-  struct thread *t = thread_current();
+void munmap(mapid_t mapping) {
   struct mmap_entry *mmap_entry = get_mmap_entry(mapping);
-
-  void *start = mmap_entry->start_page;
 
   if (mmap_entry == NULL) {
     return;
   }
 
+  void *start = mmap_entry->start_page;
+
   struct supp_page *page 
     = supp_page_lookup(start);
+  ASSERT(page != NULL);
   struct file *file = file = page->file;
 
   if (file == NULL) {
@@ -541,10 +540,27 @@ static void syscall_munmap(struct intr_frame *f) {
   }
 
   delete_mmap_entry(mapping);
-      
+
   lock_acquire(&filesys_lock);
   file_close(file);
   lock_release(&filesys_lock);
+}   
+
+void munmap_all(void) {
+  struct thread *t = thread_current();
+  struct hash_iterator i;
+  hash_first(&i, &t->mmap_table);
+  struct mmap_entry *entry = NULL;
+  while (hash_next(&i)) {
+    entry = hash_entry(hash_cur(&i), struct mmap_entry, elem);
+    munmap(entry->map_id);
+    // free(&entry);
+  }
+}
+
+static void syscall_munmap(struct intr_frame *f) {
+  int mapping = pop_arg(0, mapid_t);
+  munmap(mapping);
 }
 
 static bool check_mapping(void *start, void *end) {

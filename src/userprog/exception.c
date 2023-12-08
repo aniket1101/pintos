@@ -193,13 +193,15 @@ page_fault (struct intr_frame *f)
          ASSERT(install_page (vaddr, frame->kaddr, true));
       }
    } else {
-       switch(page->status) {                                                    
+      struct frame *f = frame_lookup(vaddr);
+       
+      switch(page->status) {                                                    
          case SWAPPED:
             // Handle swap by lazy loading
+            swap_in(vaddr, f->swap_slot);
             break;
 
          case FILE:
-            struct frame *f = frame_lookup(vaddr);
             if (f == NULL) { // Frame is NULL so allocate
                f = frame_put(vaddr, PAL_USER);
                
@@ -210,7 +212,9 @@ page_fault (struct intr_frame *f)
                off_t original_pos = file_tell(page->file);
                file_seek(page->file, page->file_offset);
 
+               lock_filesys_access();
                off_t bytes_read = file_read(page->file, f->kaddr, page->read_bytes);
+               unlock_filesys_access();
                ASSERT(page->read_bytes == 0 || bytes_read == (int) page->read_bytes);
 
                file_seek(page->file, original_pos);

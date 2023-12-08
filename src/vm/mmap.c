@@ -39,8 +39,8 @@ struct mmap_entry *get_mmap_entry(mapid_t map_id) {
 }
 
 bool delete_mmap_entry(mapid_t map_id) {
-  struct mmap_entry *link = get_mmap_entry(map_id);
-  struct hash_elem *elem = hash_delete(&(thread_current()->mmap_table), &link->elem);
+  struct mmap_entry *map_entry = get_mmap_entry(map_id);
+  struct hash_elem *elem = hash_delete(&(thread_current()->mmap_table), &map_entry->elem);
   return elem != NULL;
 }
 
@@ -50,16 +50,18 @@ bool is_mapped (void *addr) {
   return addr_to_map (addr) != NULL;
 }
 
-struct mmap_entry *addr_to_map (void *addr) {
+struct mmap_entry *addr_to_map (void *start) {
   struct hash_iterator i;
-  hash_first (&i, &thread_current()->mmaap_table);
+  hash_first (&i, &thread_current()->mmap_table);
   while (hash_next (&i)) {
       struct mmap_entry *m = hash_entry (hash_cur (&i), struct mmap_entry, elem);
 
       ASSERT (m != NULL);
 
-      if (m->start_page <= pg_round_down (start_page) &&
-          pg_round_down (start_page) < m->start_page + (m->page_count * PGSIZE))
+      // void *start = m->start_page;
+
+      if (start <= pg_round_down (start) &&
+          pg_round_down (start) < start + (m->page_count * PGSIZE))
         return m;
     }
   return NULL;

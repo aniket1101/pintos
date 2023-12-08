@@ -276,6 +276,8 @@ process_exit (void)
 
   supp_page_table_destroy(cur);
 
+  munmap_all();
+
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back

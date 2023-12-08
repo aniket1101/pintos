@@ -68,9 +68,10 @@ struct supp_page *supp_page_put(void *vaddr, enum page_status status, struct fil
 	 Returns NULL if nothing found. */
 struct supp_page *supp_page_lookup(void *vaddr) {
     struct supp_page page = {.vaddr = vaddr};
+	lock_acquire(&supp_page_table_lock);
     struct hash_elem *found_elem 
 			= hash_find(&thread_current()->supp_page_table, &page.elem);
-		
+	lock_release(&supp_page_table_lock);
 	// Return NULL if no supp_page found, otherwise return found page
     return found_elem == NULL ? NULL : hash_entry(found_elem, struct supp_page, elem);
 }
@@ -107,5 +108,7 @@ static void supp_page_free(struct hash_elem *elem, void *aux UNUSED) {
 
 /* Destroy thread t's supp_page hash table, freeing each entry. */
 void supp_page_table_destroy(struct thread *t) {
+	lock_acquire(&supp_page_table_lock);
 	hash_destroy(&t->supp_page_table, &supp_page_free);
+	lock_release(&supp_page_table_lock);
 }
