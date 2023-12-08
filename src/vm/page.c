@@ -7,6 +7,8 @@
 #include "userprog/pagedir.h"
 #include "vm/frame.h"
 #include "userprog/debug.h"
+#include "devices/swap.h"
+#include "userprog/syscall.h"
 
 static hash_hash_func supp_page_hash;
 static hash_less_func supp_page_less;
@@ -45,7 +47,6 @@ struct supp_page *supp_page_put(void *vaddr, enum page_status status, struct fil
 		return NULL;
 	}
 
-	// supp_page->vaddr = pg_round_down(vaddr);
 	supp_page->vaddr = vaddr;
 	supp_page->status = status;
 
@@ -107,10 +108,24 @@ bool supp_page_remove(void *vaddr) {
 /* Free function for supp_page_table_destroy(). */
 static void supp_page_free(struct hash_elem *elem, void *aux UNUSED) {
 	struct supp_page *page = hash_entry(elem, struct supp_page, elem);
-	// if (page->file != NULL) {
-	// 	file_close(page->file);
-	// }
+	
+	struct frame *frame = frame_lookup(page->vaddr);
+	if (frame != NULL) {
+	  frame_destroy(frame_lookup(page->vaddr));
+	}
 
+	if (page->status == SWAPPED) {
+	  if (page->file == NULL) {
+		swap_drop(page->swap_slot);
+	  } else {
+		void *kpage = palloc_get_page(PAL_USER);
+		swap_in(kpage, page->swap_slot);
+		lock_filesys_access();
+		file_write_at(page->file, kpage ,page->read_bytes, page->file_offset);
+		unlock_filesys_access();
+		palloc_free_page(kpage);
+	  }
+	}
 	free(page);
 }
 

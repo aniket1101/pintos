@@ -192,12 +192,14 @@ page_fault (struct intr_frame *f)
       
       switch(page->status) {                                                    
          case SWAPPED:
-            //TODO
+            // Handle swap by lazy loading
+            swap_in(vaddr, page->swap_slot);
             break;
 
          case FILE:
             if (frame == NULL) { // Frame is NULL so allocate
-               frame = frame_put(vaddr, PAL_USER);
+               frame = page->writable ? frame_put(vaddr, PAL_USER) : 
+                  frame_put_file(vaddr, PAL_USER, page->file, page->file_offset);
                
                ASSERT(frame != NULL);
                ASSERT(install_page(vaddr, frame->kaddr, page->writable));
