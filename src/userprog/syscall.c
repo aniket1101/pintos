@@ -192,23 +192,16 @@ void exit_process(int status) {
   - Executing the process called in cmd_line
   - Returning the returned pid */  
 static void syscall_exec(struct intr_frame *f) {
-PUTBUF("1.");
   char *cmd_line = pop_arg(0, char *); 
-PUTBUF("2.");
-PUTBUF_FORMAT("cmd_line=%p", cmd_line);
   validate_string(cmd_line);
-PUTBUF("3.");
   pid_t pid = ((pid_t) process_execute(cmd_line));
-PUTBUF("4.");
 
   // If process_execute returns an incorrect id, return it
   if (pid != TID_ERROR) {
     // Initialises pc_link struct which has info about the parent and child
     pc_link_init(pid);
-    PUTBUF("5.");
   }
 
-  PUTBUF("6.");
   f->eax = pid;  
 }
 
