@@ -15,9 +15,6 @@ struct frame {
 
     struct hash threads;
 
-    size_t swap_slot;
-    bool swapped;
-
     struct hash_elem elem;
 };
 

@@ -123,7 +123,6 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   hash_init(&(frame->threads), &frame_thread_hash, &frame_thread_less, NULL);
   frame->vaddr = vaddr;
   frame->kaddr = kaddr;
-  frame->swapped = false;
   struct frame_thread *frame_thread = (struct frame_thread *) malloc (sizeof (struct frame_thread));
   frame_thread->t = thread_current();
   hash_insert(&(frame->threads), &(frame_thread->elem));
@@ -178,14 +177,11 @@ static struct frame *choose_frame(void) {
     for (struct hash_elem *h = start_elem; h != NULL; h = hash_next(&i)) {
       struct frame *f = hash_entry(h, struct frame, elem);
       if (!frame_is_accessed(f)) {
-        if (hash_size(&(f->threads)) == 1) {
-          // dirty case will not be for shared files so we know threads size is 1
-          struct hash_iterator i;
-          hash_first (&i, &(f->threads));
-          struct frame_thread *frame_thread = hash_entry (hash_cur (&i), struct frame_thread, elem);
-          if (pagedir_is_dirty(frame_thread->t->pagedir, f->vaddr)) {
-            f->swap_slot = swap_out(f->vaddr);
-            f->swapped = true;
+        if (hash_size(&(f->threads)) == 1 && get_shared_file(f) == NULL) {
+          // dirty case will not be for shared files
+          if (pagedir_is_dirty(f->t->pagedir, f->vaddr)) {
+            struct supp_page *page = supp_page_lookup(f->vaddr);
+            page->swap_slot = swap_out(f->vaddr);
           }
         }
         clock_hand++;
@@ -234,16 +230,12 @@ void set_accessed_false(struct frame *frame) {
 
 void frame_free(struct frame *frame) {
   ASSERT(frame != NULL);
-  frame->t = thread_current();
-  if (hash_size(&(frame->threads)) == 1) {
+  if (hash_size(&(frame->threads)) == 1 && get_shared_file(frame) == NULL) {
     // thread_current is the only thread in the frame
-    struct hash_iterator i;
-    hash_first (&i, &(frame->threads));
-    struct frame_thread *frame_thread = hash_entry (hash_cur (&i), struct frame_thread, elem);
-    // if (pagedir_is_dirty(frame_thread->t->pagedir, frame->vaddr)) {
-      // struct supp_page *page = supp_page_lookup(frame->vaddr);
-      // file_write_at(page->file, frame->vaddr, page->read_bytes, page->file_offset);
-    // }
+    struct supp_page *page = supp_page_lookup(frame->vaddr);
+    if (pagedir_is_dirty(frame->t->pagedir, frame->vaddr)) {
+      page->swap_slot = swap_out(frame->vaddr);
+    }
   }
 
   hash_destroy(&(frame->threads), &frame_thread_destroy);
@@ -302,9 +294,6 @@ void frame_destroy(void *kaddr) {
       if (frame_at_clock != NULL 
           && !frame_less(&frame_at_clock->elem, &frame->elem, NULL)) {
         frame_at_clock = frame_get_at(clock_hand--);
-      }
-      if (frame->swapped) {
-        swap_drop(frame->swap_slot);
       }
       frame_free(frame);
     } else {

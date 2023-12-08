@@ -21,6 +21,8 @@ struct supp_page {
     off_t file_offset;
     size_t read_bytes;        /* A page's read bytes */
     size_t zero_bytes;        /* A page's zero bytes */
+
+    size_t swap_slot;
     
     struct hash_elem elem;      /* Allows for hash of pages */
 };

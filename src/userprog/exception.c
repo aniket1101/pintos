@@ -196,6 +196,7 @@ page_fault (struct intr_frame *f)
        switch(page->status) {                                                    
          case SWAPPED:
             // Handle swap by lazy loading
+            swap_in(vaddr, page->swap_slot);
             break;
 
          case FILE:
