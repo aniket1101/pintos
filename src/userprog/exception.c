@@ -222,18 +222,6 @@ page_fault (struct intr_frame *f)
             
             break;
 
-         case ZERO:
-            if (f == NULL) {
-               f = frame_put(vaddr, PAL_ZERO);
-               ASSERT(f != NULL);
-               ASSERT(install_page(vaddr, f->kaddr, page->writable));
-               ASSERT(page->file != NULL);
-               memset(f->kaddr, 0, PGSIZE);
-            } else {
-               pagedir_set_writable(t->pagedir, vaddr, page->writable);
-            }
-            break;
-
          default:
             PUTBUF("Unrecognised page status!!");
             NOT_REACHED();

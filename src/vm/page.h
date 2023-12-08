@@ -8,7 +8,6 @@
 
 enum page_status {
     FILE,                       /* In the file system */
-    ZERO,                       /* Page completely zeroed out */
     SWAPPED                    /* Swapped out */
 };
 
