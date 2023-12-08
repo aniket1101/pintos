@@ -19,6 +19,8 @@ struct mmap_entry {
 bool mmap_init(struct hash *mmap_table);
 bool add_mmap_entry(void *start_page, int page_cnt);
 bool delete_mmap_entry(mapid_t map_id);
+bool is_mapped (void *addr);
+struct mmap_entry *addr_to_map (void *addr);
 struct mmap_entry *get_mmap_entry(mapid_t map_id);
 bool insert_mmap_entry(void *page,
     struct file *file, off_t offset, uint32_t page_space, bool is_writable);

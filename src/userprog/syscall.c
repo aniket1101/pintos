@@ -461,12 +461,9 @@ static void syscall_mmap(struct intr_frame *f) {
 
   mapid_t map_id = -1;
 
-  if (pg_ofs(addr) != 0) {
-    goto ret;
-  }
-
   struct file *file = fd->file_info->file;
-  if (file == NULL || addr == NULL || fd->fd_num < 2) {
+
+  if (file == NULL || addr == NULL || fd->fd_num < 2 || !is_user_vaddr(addr) || pg_ofs(addr) != 0) {
     goto ret;
   }
 
@@ -484,10 +481,21 @@ static void syscall_mmap(struct intr_frame *f) {
   file = file_reopen(file);
   lock_release(&filesys_lock);
 
-  int page_cnt = read_bytes % PGSIZE == 0 ? read_bytes / PGSIZE : ((read_bytes / PGSIZE) + 1);
+  uint32_t offset;
+  int page_cnt;
+
+  for (offset = 0; offset < read_bytes; offset += PGSIZE){
+      if (!is_user_vaddr (addr + offset) ||
+          pagedir_get_page (thread_current()->pagedir, addr + offset) ||
+          is_mapped (addr + offset)) {
+        goto ret;
+      }
+
+      ++page_cnt;
+  }
+
   void *temp_addr = addr;
-  while (read_bytes > 0) 
-  {
+  while (read_bytes > 0) {
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 
     supp_page_put(addr, FILE, file, 0, true, page_read_bytes);

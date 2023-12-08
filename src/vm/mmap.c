@@ -44,6 +44,27 @@ bool delete_mmap_entry(mapid_t map_id) {
   return elem != NULL;
 }
 
+/* Returns true iff a given address is mapped to a file in the current
+   thread. */
+bool is_mapped (void *addr) {
+  return addr_to_map (addr) != NULL;
+}
+
+struct mmap_entry *addr_to_map (void *addr) {
+  struct hash_iterator i;
+  hash_first (&i, &thread_current()->mmaap_table);
+  while (hash_next (&i)) {
+      struct mmap_entry *m = hash_entry (hash_cur (&i), struct mmap_entry, elem);
+
+      ASSERT (m != NULL);
+
+      if (m->start_page <= pg_round_down (start_page) &&
+          pg_round_down (start_page) < m->start_page + (m->page_count * PGSIZE))
+        return m;
+    }
+  return NULL;
+}
+
 static unsigned mmap_entry_hash(const struct hash_elem *e,
  void *aux UNUSED) {
   struct mmap_entry *entry = hash_entry(e, struct mmap_entry, elem);
