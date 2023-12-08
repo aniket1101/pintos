@@ -28,6 +28,7 @@
 #include "filesys/file.h"
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/mmap.h"
 
 #define PUSH_ESP(val, type) \
   if_->esp -= sizeof(type); \
@@ -261,8 +262,10 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
 
-  fd_hash_destroy(); // Destroy this thread's hash table of fds
+  mmap_destroy();
   
+  fd_hash_destroy(); // Destroy this thread's hash table of fds
+
   lock_filesys_access();
   // Allow this executable to be written to
   if (cur->file != NULL) {
@@ -575,9 +578,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
       
       /* Check if virtual page already allocated */
-      enum page_status status = page_zero_bytes == PGSIZE ? FILE : FILE;
-      
-      supp_page_put(upage, status, file, ofs, writable, page_read_bytes);
+      supp_page_put(upage, FILE, file, ofs, writable, page_read_bytes);
  
       /* Advance. */
       read_bytes -= page_read_bytes;

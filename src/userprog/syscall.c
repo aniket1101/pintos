@@ -458,16 +458,11 @@ static void syscall_mmap(struct intr_frame *f) {
   void *addr = pop_arg(1, void *);
 
   struct fd *fd = fd_lookup_safe(fd_num);
-
-  mapid_t map_id = -1;
-
-  if (pg_ofs(addr) != 0) {
-    goto ret;
-  }
-
   struct file *file = fd->file_info->file;
-  if (file == NULL || addr == NULL || fd->fd_num < 2) {
-    goto ret;
+
+  if (file == NULL || fd->fd_num < 2
+      || addr == NULL  || !is_user_vaddr(addr) || pg_ofs(addr) != 0) {
+    goto fail;
   }
 
   lock_acquire(&filesys_lock);
@@ -475,66 +470,46 @@ static void syscall_mmap(struct intr_frame *f) {
   lock_release(&filesys_lock);
 
   if (read_bytes == 0 || check_mapping(addr, addr + read_bytes)) {
-    goto ret;
+    fail:
+      f->eax = -1;
+      return;
   }
 
-  map_id = thread_current()->map_id;
+  f->eax = thread_current()->map_id;
   
   lock_acquire(&filesys_lock);
   file = file_reopen(file);
   lock_release(&filesys_lock);
 
-  int page_cnt = read_bytes % PGSIZE == 0 ? read_bytes / PGSIZE : ((read_bytes / PGSIZE) + 1);
-  void *temp_addr = addr;
-  while (read_bytes > 0) 
-  {
-    size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+  int page_cnt = 0;
+  off_t offset = 0;
 
-    supp_page_put(addr, FILE, file, 0, true, page_read_bytes);
+  void *temp_addr = addr;
+  file_seek (file, offset);
+  
+  while (read_bytes > 0) 
+    {
+      /* Calculate how to fill this page.
+         We will read PAGE_READ_BYTES bytes from FILE
+         and zero the final PAGE_ZERO_BYTES bytes. */
+      size_t page_read_bytes = CLAMP(read_bytes, 0, PGSIZE);
       
-    read_bytes -= page_read_bytes;
-    addr += PGSIZE;
-  }
+      /* Check if virtual page already allocated */
+      supp_page_put(addr, FILE, file, offset, true, page_read_bytes);
+ 
+      /* Advance. */
+      read_bytes -= page_read_bytes;
+      addr += PGSIZE;
+      offset += PGSIZE;
+      page_cnt++;
+    }
  
   add_mmap_entry(temp_addr, page_cnt);
-  
-  ret:
-    f->eax = map_id;
 }
 
 static void syscall_munmap(struct intr_frame *f) {
   int mapping = pop_arg(0, mapid_t);
-
-  struct mmap_entry *mmap_entry = get_mmap_entry(mapping);
-
-  void *start = mmap_entry->start_page;
-
-  if (mmap_entry == NULL) {
-    return;
-  }
-
-  struct supp_page *page = supp_page_lookup(start);
-  struct file *file = file = page->file;
-
-  if (file == NULL) {
-    return;
-  }
-
-  for (void *curr = start; curr < start + (mmap_entry->page_count * PGSIZE);
-      curr += PGSIZE) {
-    supp_page_remove(curr);
-    struct frame *f = frame_lookup(curr);
-
-    if (f != NULL) {
-      frame_free(f);
-    }
-  }
-
   delete_mmap_entry(mapping);
-      
-  lock_acquire(&filesys_lock);
-  file_close(file);
-  lock_release(&filesys_lock);
 }
 
 static bool check_mapping(void *start, void *end) {
