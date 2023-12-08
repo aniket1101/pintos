@@ -12,15 +12,20 @@
 #include "devices/swap.h"
 #include "vm/page.h"
 #include "vm/mmap.h"
+#include "userprog/process.h"
 
 static hash_hash_func frame_hash;
 static hash_less_func frame_less;
 static hash_hash_func file_hash_hash;
 static hash_less_func file_less;
+static hash_hash_func frame_thread_hash;
+static hash_less_func frame_thread_less;
+static hash_action_func frame_thread_destroy;
 
 static struct hash frame_table;
 static struct hash shared_files;
 static struct lock frame_lock;
+static struct lock shared_file_lock;
 
 static int clock_hand;
 static struct frame *frame_at_clock;
@@ -29,12 +34,13 @@ static struct frame *choose_frame(void);
 static struct frame *frame_get_at(int index);
 bool frame_is_accessed(struct frame *frame);
 void set_accessed_false(struct frame *frame);
-void remove_vpage(struct frame *frame);
+void remove_thread(struct frame *frame);
 struct shared_file *get_shared_file(struct frame *frame);
 
 void frame_table_init(void) {
   hash_init(&frame_table, &frame_hash, &frame_less, NULL);
   lock_init(&frame_lock);
+  lock_init(&shared_file_lock);
   clock_hand = 0;
   hash_init(&shared_files, &file_hash_hash, &file_less, NULL);
 }
@@ -60,13 +66,14 @@ static bool file_less(const struct hash_elem *a,
   return file_hash_hash(a, aux) < file_hash_hash(b, aux);
 }
 
-struct frame *frame_put_file(struct file *file, int offset, void *vaddr, enum palloc_flags flag) {
+struct frame *frame_put_file(void *vaddr, enum palloc_flags flag, struct file *file, int offset) {
   struct shared_file s_file;
   s_file.file = file;
   s_file.offset = offset;
   struct hash_elem *elem = hash_find(&shared_files, &(s_file.elem));
   struct frame *frame;
   if (elem == NULL) {
+    // Shared file is not in a frame yet
     struct shared_file *shared_file = (struct shared_file *) malloc (sizeof (struct shared_file));
     frame = frame_put(vaddr, flag);
     shared_file->frame = frame;
@@ -74,12 +81,13 @@ struct frame *frame_put_file(struct file *file, int offset, void *vaddr, enum pa
     shared_file->offset = offset;
     hash_insert(&shared_files, &(shared_file->elem));
   } else {
+    // Shared file is in frame
     frame = hash_entry(elem, struct shared_file, elem)->frame;
-    struct vpage *vpage = (struct vpage *) malloc (sizeof (struct vpage));
-    vpage->vaddr = vaddr;
-    list_push_back(&(frame->vpages), &(vpage->elem));
+    struct frame_thread *frame_thread = (struct frame_thread *) malloc (sizeof (struct frame_thread));
+    frame_thread->t = thread_current();
+    install_page(frame->vaddr, frame->kaddr, false);
+    hash_insert(&(frame->threads), &(frame_thread->elem));
   }
-
 
   return frame;
 }
@@ -112,12 +120,13 @@ struct frame *frame_put(void *vaddr, enum palloc_flags flag) {
   }
 
   frame->t = thread_current();
-  list_init(&(frame->vpages));
+  hash_init(&(frame->threads), &frame_thread_hash, &frame_thread_less, NULL);
+  frame->vaddr = vaddr;
   frame->kaddr = kaddr;
   frame->swapped = false;
-  struct vpage *vpage = (struct vpage *) malloc (sizeof (struct vpage));
-  vpage->vaddr = vaddr;
-  list_push_back(&(frame->vpages), &(vpage->elem));
+  struct frame_thread *frame_thread = (struct frame_thread *) malloc (sizeof (struct frame_thread));
+  frame_thread->t = thread_current();
+  hash_insert(&(frame->threads), &(frame_thread->elem));
 
   ASSERT(hash_insert(&frame_table, &frame->elem) == NULL);
 
@@ -143,8 +152,10 @@ struct frame *frame_lookup(void *vaddr) {
 
 void evict_frame(void) {
   struct frame *to_evict = choose_frame();
-  ASSERT (to_evict != NULL); 
+  ASSERT (to_evict != NULL);
+  lock_acquire(&frame_lock);
   frame_free(to_evict);
+  lock_release(&frame_lock);
 }
 
 /* Choose the frame to be evicted according to clock replacement algorithm. */
@@ -167,11 +178,13 @@ static struct frame *choose_frame(void) {
     for (struct hash_elem *h = start_elem; h != NULL; h = hash_next(&i)) {
       struct frame *f = hash_entry(h, struct frame, elem);
       if (!frame_is_accessed(f)) {
-        if (list_size(&(f->vpages)) == 1) {
-          // dirty case will not be for shared files so we know vpage size is 1
-          struct vpage *vpage = list_entry(list_begin(&(f->vpages)), struct vpage, elem);
-          if (pagedir_is_dirty(f->t->pagedir, vpage->vaddr)) {
-            f->swap_slot = swap_out(vpage->vaddr);
+        if (hash_size(&(f->threads)) == 1) {
+          // dirty case will not be for shared files so we know threads size is 1
+          struct hash_iterator i;
+          hash_first (&i, &(f->threads));
+          struct frame_thread *frame_thread = hash_entry (hash_cur (&i), struct frame_thread, elem);
+          if (pagedir_is_dirty(frame_thread->t->pagedir, f->vaddr)) {
+            f->swap_slot = swap_out(f->vaddr);
             f->swapped = true;
           }
         }
@@ -190,64 +203,84 @@ static struct frame *choose_frame(void) {
 }
 
 bool frame_is_accessed(struct frame *frame) {
-  for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
-      struct vpage *vpage = list_entry (e, struct vpage, elem);
-    if (pagedir_is_accessed(frame->t->pagedir, vpage->vaddr)) {
-      set_accessed_false(frame);
-      return true;
+  // Called from choose frame so frame lock is acquired
+  if (!hash_empty(&(frame->threads))) {
+    struct hash_iterator i;
+    hash_first (&i, &(frame->threads));
+
+    while (hash_next (&i)) { // Loop through the hash
+      struct frame_thread *frame_thread = hash_entry (hash_cur (&i), struct frame_thread, elem);
+      if (pagedir_is_accessed(frame_thread->t->pagedir, frame->vaddr)) {
+        set_accessed_false(frame);
+        return true;
+      }
     }
   }
   return false;
 }
 
 void set_accessed_false(struct frame *frame) {
-  for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
-    struct vpage *vpage = list_entry (e, struct vpage, elem);
-    pagedir_set_accessed(frame->t->pagedir, vpage->vaddr, false);
+  // Called from choose frame so frame lock is acquired
+    if (!hash_empty(&(frame->threads))) {
+    struct hash_iterator i;
+    hash_first (&i, &(frame->threads));
+
+    while (hash_next (&i)) { // Loop through the hash
+      struct frame_thread *frame_thread = hash_entry (hash_cur (&i), struct frame_thread, elem);
+      pagedir_set_accessed(frame_thread->t->pagedir, frame->vaddr, false);
+    }
   }
 }
 
 void frame_free(struct frame *frame) {
   ASSERT(frame != NULL);
   frame->t = thread_current();
-  if (list_size(&(frame->vpages)) == 1) {
-    struct vpage *vpage = list_entry(list_front(&(frame->vpages)), struct vpage, elem);
-    // if (pagedir_is_dirty(frame->t->pagedir, vpage->vaddr)) {
-    //   struct supp_page *page = supp_page_lookup(vpage->vaddr);
-    //   file_write_at(page->file, vpage->vaddr, page->read_bytes, page->file_offset);
+  if (hash_size(&(frame->threads)) == 1) {
+    // thread_current is the only thread in the frame
+    struct hash_iterator i;
+    hash_first (&i, &(frame->threads));
+    struct frame_thread *frame_thread = hash_entry (hash_cur (&i), struct frame_thread, elem);
+    // if (pagedir_is_dirty(frame_thread->t->pagedir, frame->vaddr)) {
+      // struct supp_page *page = supp_page_lookup(frame->vaddr);
+      // file_write_at(page->file, frame->vaddr, page->read_bytes, page->file_offset);
     // }
   }
 
-  for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
-    // free(list_entry (e, struct vpage, elem));
-  }
+  hash_destroy(&(frame->threads), &frame_thread_destroy);
 
   struct shared_file *shared_file = get_shared_file(frame);
   if (shared_file != NULL) {
+    lock_acquire(&shared_file_lock);
+    hash_delete(&shared_files, &(shared_file->elem));
+    lock_release(&shared_file_lock);
     free(shared_file);
   }
-
   ASSERT(hash_delete(&frame_table, &frame->elem) != NULL);
   palloc_free_page(frame->kaddr);
   free(frame);
 }
 
 struct shared_file *get_shared_file(struct frame *frame) {
-    if (!hash_empty(&shared_files)) {
+  lock_acquire(&shared_file_lock);
+  if (!hash_empty(&shared_files)) {
     struct hash_iterator i;
     hash_first (&i, &shared_files);
 
     while (hash_next (&i)) { // Loop through the hash
       struct shared_file *s_file = hash_entry (hash_cur (&i), struct shared_file, elem);
       if (frame == s_file->frame) {
+        lock_release(&shared_file_lock);
         return s_file;
       }
     }
   }
+
+  lock_release(&shared_file_lock);
   return NULL;
 }
 
 static struct frame *frame_get_at(int index) {
+  lock_acquire(&frame_lock);  
   struct hash_iterator iter;
   hash_first(&iter, &frame_table);
   struct hash_elem *h_elem = NULL;
@@ -255,39 +288,51 @@ static struct frame *frame_get_at(int index) {
     h_elem = hash_next(&iter);
     ASSERT (h_elem != NULL);
   }
+  struct frame *frame = hash_entry(h_elem, struct frame, elem);
+  lock_release(&frame_lock);  
 
-  return hash_entry(h_elem, struct frame, elem);
+  return frame;
 }
 
 void frame_destroy(void *kaddr) {
   lock_acquire(&frame_lock);
   struct frame *frame = frame_kaddr_lookup(kaddr);
-  if (frame == NULL) {
-    palloc_free_page(kaddr);
-  } else {
-    if (list_size(&(frame->vpages)) == 1) {
+  if (frame != NULL) {
+    if (hash_size(&(frame->threads)) == 1) {
       if (frame_at_clock != NULL 
           && !frame_less(&frame_at_clock->elem, &frame->elem, NULL)) {
         frame_at_clock = frame_get_at(clock_hand--);
       }
-      if (frame->swapped) swap_drop(frame->swap_slot);
+      if (frame->swapped) {
+        swap_drop(frame->swap_slot);
+      }
       frame_free(frame);
     } else {
-      remove_vpage(frame);
+      remove_thread(frame);
     }
   }
 
   lock_release(&frame_lock);
 } 
 
-void remove_vpage(struct frame *frame) {
-  for (struct list_elem *e = list_begin (&(frame->vpages)); e != list_end (&(frame->vpages)); e = list_next (e)) {
-    struct vpage *vpage = list_entry (e, struct vpage, elem);
-    struct supp_page sp;
-    sp.vaddr = vpage->vaddr;
-    if (hash_find(&(thread_current()->supp_page_table), &(sp.elem)) != NULL) {
-      list_remove(&(vpage->elem));
-      free(vpage);
-    }
+void frame_thread_destroy (struct hash_elem *e, void *aux UNUSED) {
+  free(hash_entry(e, struct frame_thread, elem));
+}
+
+void remove_thread(struct frame *frame) {
+  struct frame_thread ft;
+  ft.t = thread_current();
+  struct hash_elem *elem = hash_delete(&(frame->threads), &(ft.elem));
+  if (elem != NULL) {
+    free(hash_entry(elem, struct frame_thread, elem));
   }
+}
+
+static unsigned frame_thread_hash(const struct hash_elem *e, void *aux UNUSED) {
+  return hash_int(hash_entry(e, struct frame_thread, elem)->t->tid);
+}
+
+static bool frame_thread_less(const struct hash_elem *a, 
+    const struct hash_elem *b, void *aux) {
+  return frame_thread_hash(a, aux) < frame_thread_hash(b, aux);
 }

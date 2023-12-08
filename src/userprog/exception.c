@@ -201,7 +201,11 @@ page_fault (struct intr_frame *f)
          case FILE:
             struct frame *f = frame_lookup(vaddr);
             if (f == NULL) { // Frame is NULL so allocate
-               f = frame_put(vaddr, PAL_USER);
+              if (page->writable) {
+                f = frame_put(vaddr, PAL_USER);
+              } else {
+                f = frame_put_file(vaddr, PAL_USER, page->file, page->file_offset);
+              }
                
                ASSERT(f != NULL);
                ASSERT(install_page(vaddr, f->kaddr, page->writable));
@@ -224,7 +228,11 @@ page_fault (struct intr_frame *f)
 
          case ZERO:
             if (f == NULL) {
-               f = frame_put(vaddr, PAL_ZERO);
+              if (page->writable) {
+                f = frame_put(vaddr, PAL_USER);
+              } else {
+                f = frame_put_file(vaddr, PAL_USER, page->file, page->file_offset);
+              }
                ASSERT(f != NULL);
                ASSERT(install_page(vaddr, f->kaddr, page->writable));
                ASSERT(page->file != NULL);
