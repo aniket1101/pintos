@@ -25,6 +25,7 @@
 #define PUSH_OVERFLOW 4
 #define EAX_ERR 0xffffffff
 
+static void exception_exit(struct intr_frame *f) NO_RETURN;
 static bool should_grow_stack(void *fault_addr, bool user, struct intr_frame *f, struct thread *t);
 
 /* Number of page faults processed. */
@@ -174,9 +175,13 @@ page_fault (struct intr_frame *f)
       write ? "writing" : "reading",
       user ? "user" : "kernel");
 
-	/* Round the fault address down to a page boundary. */
-   void *vaddr = pg_round_down(fault_addr);
+   if ((is_kernel_vaddr(fault_addr) && write) || !not_present) {
+      exception_exit(f);
+   }
 
+   /* Round the fault address down to a page boundary. */
+   void *vaddr = pg_round_down(fault_addr);
+   
    /* Get the relevant page from this thread's page table. */
    struct supp_page *page = supp_page_lookup(vaddr);
    
@@ -227,15 +232,21 @@ page_fault (struct intr_frame *f)
             PUTBUF("Unrecognised page status!!");
             NOT_REACHED();
       }
+      return;
    } else if (should_grow_stack(fault_addr, user, f, t)) {
       struct frame *frame = frame_put(vaddr, PAL_USER | PAL_ZERO);
       ASSERT(frame != NULL);
       ASSERT(install_page (vaddr, frame->kaddr, true));
-   } else {
-      f->eip = (void (*) (void)) f->eax;
-      f->eax = EAX_ERR;
-      exit_process(-1);
-   }
+      return;
+   } 
+
+   exception_exit(f);
+}
+
+static void exception_exit(struct intr_frame *f) {
+   f->eip = (void (*) (void)) f->eax;
+   f->eax = EAX_ERR;
+   exit_process(-1);
 }
 
 static bool should_grow_stack(void *fault_addr, bool user, struct intr_frame *f, struct thread *t) {
