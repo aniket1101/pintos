@@ -194,7 +194,6 @@ void exit_process(int status) {
 static void syscall_exec(struct intr_frame *f) {
   char *cmd_line = pop_arg(0, char *); 
   validate_string(cmd_line);
-
   pid_t pid = ((pid_t) process_execute(cmd_line));
 
   // If process_execute returns an incorrect id, return it
@@ -505,7 +504,6 @@ static void syscall_mmap(struct intr_frame *f) {
 static void syscall_munmap(struct intr_frame *f) {
   int mapping = pop_arg(0, mapid_t);
 
-  struct thread *t = thread_current();
   struct mmap_entry *mmap_entry = get_mmap_entry(mapping);
 
   void *start = mmap_entry->start_page;
@@ -514,8 +512,7 @@ static void syscall_munmap(struct intr_frame *f) {
     return;
   }
 
-  struct supp_page *page 
-    = supp_page_lookup(start);
+  struct supp_page *page = supp_page_lookup(start);
   struct file *file = file = page->file;
 
   if (file == NULL) {
